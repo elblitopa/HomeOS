@@ -7,7 +7,14 @@ import logging
 from datetime import datetime, timedelta
 
 from backend.database import SessionLocal
-from backend.models import Event, SentReminder, Todo, get_setting
+from backend.models import (
+    Event,
+    RecurringPayment,
+    SentReminder,
+    Subscription,
+    Todo,
+    get_setting,
+)
 from backend.notifications.discord import send_webhook
 
 log = logging.getLogger("homeos.scheduler")
@@ -104,6 +111,47 @@ def process_reminders() -> int:
                     if send_webhook(msg, url):
                         _mark_sent(db, "todo", todo.id, offset)
                         sent += 1
+
+        sent += _process_payment_notices(db, url, now)
+    return sent
+
+
+def _payment_key(due, days_before: int) -> int:
+    """El next_due avanza con cada pago, así que el dedup necesita la fecha:
+    se codifica YYYYMMDD*10 + dias_antes en offset_minutes."""
+    return int(due.strftime("%Y%m%d")) * 10 + days_before
+
+
+def _process_payment_notices(db, url: str, now: datetime) -> int:
+    """Avisa pagos de suscripciones y deudas: 1 día antes y el mismo día."""
+    sent = 0
+    today = now.date()
+
+    subs = db.query(Subscription).filter(Subscription.next_due.isnot(None)).all()
+    debts = (
+        db.query(RecurringPayment)
+        .filter(
+            RecurringPayment.next_due.isnot(None),
+            RecurringPayment.installments_paid < RecurringPayment.installments_total,
+        )
+        .all()
+    )
+
+    for kind, items in (("subscription", subs), ("recurring", debts)):
+        for item in items:
+            days_until = (item.next_due.date() - today).days
+            if days_until not in (0, 1):
+                continue
+            key = _payment_key(item.next_due, days_until)
+            if _already_sent(db, kind, item.id, key):
+                continue
+            amount = item.amount if kind == "subscription" else item.installment_amount
+            label = "Suscripción" if kind == "subscription" else "Pago de deuda"
+            when = "es HOY" if days_until == 0 else "es mañana"
+            msg = f"💳 {label} **{item.name}** — ${amount:,.2f} {when} ({item.next_due.strftime('%d/%m')})"
+            if send_webhook(msg, url):
+                _mark_sent(db, kind, item.id, key)
+                sent += 1
     return sent
 
 

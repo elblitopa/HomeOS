@@ -8,7 +8,18 @@ from fastapi.staticfiles import StaticFiles
 from backend import config
 from backend.database import Base, SessionLocal, engine
 import backend.models  # noqa: F401  (registra los modelos en Base.metadata)
-from backend.routers import apps, contexts, events, settings, system, todos, uploads
+from backend.models import Category, DEFAULT_CATEGORIES
+from backend.routers import (
+    apps,
+    business,
+    contexts,
+    events,
+    finance,
+    settings,
+    system,
+    todos,
+    uploads,
+)
 from backend.routers.apps import run_manifest_import
 from backend.services.scheduler import reminder_loop
 
@@ -17,6 +28,10 @@ Base.metadata.create_all(engine)
 
 with SessionLocal() as db:
     run_manifest_import(db)
+    if not db.query(Category).first():
+        for name, icon in DEFAULT_CATEGORIES:
+            db.add(Category(name=name, icon=icon, is_default=1))
+        db.commit()
 
 
 @asynccontextmanager
@@ -32,6 +47,8 @@ app.include_router(apps.router)
 app.include_router(contexts.router)
 app.include_router(todos.router)
 app.include_router(events.router)
+app.include_router(finance.router)
+app.include_router(business.router)
 app.include_router(settings.router)
 app.include_router(uploads.router)
 app.include_router(system.router)

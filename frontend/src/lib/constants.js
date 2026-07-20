@@ -59,3 +59,42 @@ export function dueText(iso) {
 
 // datetime-local input <-> ISO local sin zona
 export const toInputValue = (iso) => (iso ? iso.slice(0, 16) : "");
+
+// ---------- finanzas ----------
+
+export const ACCOUNT_KINDS = [
+  { value: "efectivo", label: "Efectivo", icon: "💵" },
+  { value: "debito", label: "Débito", icon: "💳" },
+  { value: "credito", label: "Crédito", icon: "🏦" },
+  { value: "ingreso_extra", label: "Ingreso extra", icon: "💰" },
+  { value: "otro", label: "Otro", icon: "📁" },
+];
+
+export const PERIODS = [
+  { value: "mensual", label: "Mensual" },
+  { value: "bimestral", label: "Bimestral" },
+  { value: "trimestral", label: "Trimestral" },
+  { value: "semestral", label: "Semestral" },
+  { value: "anual", label: "Anual" },
+];
+
+export const CURRENCIES = ["MXN", "USD", "EUR"];
+
+export const kindOf = (value) =>
+  ACCOUNT_KINDS.find((k) => k.value === value) || ACCOUNT_KINDS[4];
+
+export function fmtMoney(amount, currency = "MXN") {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount ?? 0);
+}
+
+export function monthLabel(key) {
+  // "2026-07" -> "Julio 2026"
+  const [y, m] = key.split("-").map(Number);
+  const name = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long" });
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${y}`;
+}

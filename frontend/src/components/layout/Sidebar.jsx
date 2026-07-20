@@ -5,7 +5,7 @@ const NAV = [
   { to: "/", label: "Apps", icon: "🚀", enabled: true },
   { to: "/calendario", label: "Calendario", icon: "📅", enabled: true },
   { to: "/tareas", label: "Tareas", icon: "✅", enabled: true },
-  { to: "/finanzas", label: "Finanzas & Negocios", icon: "💼", enabled: false },
+  { to: "/finanzas", label: "Finanzas & Negocios", icon: "💼", enabled: true },
   { to: "/rutinas", label: "Rutinas", icon: "🔁", enabled: false },
   { to: "/notas", label: "Notas", icon: "📝", enabled: false },
   { to: "/archivos", label: "Archivos", icon: "📁", enabled: false },
