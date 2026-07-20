@@ -6,9 +6,9 @@ const NAV = [
   { to: "/calendario", label: "Calendario", icon: "📅", enabled: true },
   { to: "/tareas", label: "Tareas", icon: "✅", enabled: true },
   { to: "/finanzas", label: "Finanzas & Negocios", icon: "💼", enabled: true },
-  { to: "/rutinas", label: "Rutinas", icon: "🔁", enabled: false },
-  { to: "/notas", label: "Notas", icon: "📝", enabled: false },
-  { to: "/archivos", label: "Archivos", icon: "📁", enabled: false },
+  { to: "/rutinas", label: "Rutinas", icon: "🔁", enabled: true },
+  { to: "/notas", label: "Notas", icon: "📝", enabled: true },
+  { to: "/archivos", label: "Archivos", icon: "📁", enabled: true },
   { to: "/ajustes", label: "Ajustes", icon: "⚙️", enabled: true },
 ];
 

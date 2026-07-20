@@ -8,6 +8,7 @@ from backend.models.business import (
 )
 from backend.models.context import Context
 from backend.models.event import Event
+from backend.models.file_entry import FileEntry, kind_for
 from backend.models.finance import (
     Account,
     Category,
@@ -18,6 +19,8 @@ from backend.models.finance import (
     Subscription,
     Transaction,
 )
+from backend.models.note import Note
+from backend.models.routine import Routine, RoutineLog
 from backend.models.sent_reminder import SentReminder
 from backend.models.setting import Setting, get_setting, set_setting
 from backend.models.todo import Todo, TodoEntry
@@ -33,7 +36,12 @@ __all__ = [
     "Context",
     "DEFAULT_CATEGORIES",
     "Event",
+    "FileEntry",
     "Goal",
+    "Note",
+    "Routine",
+    "RoutineLog",
+    "kind_for",
     "PERIOD_MONTHS",
     "Provider",
     "RecurringPayment",

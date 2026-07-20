@@ -14,7 +14,10 @@ from backend.routers import (
     business,
     contexts,
     events,
+    files,
     finance,
+    notes,
+    routines,
     settings,
     system,
     todos,
@@ -49,6 +52,9 @@ app.include_router(todos.router)
 app.include_router(events.router)
 app.include_router(finance.router)
 app.include_router(business.router)
+app.include_router(routines.router)
+app.include_router(notes.router)
+app.include_router(files.router)
 app.include_router(settings.router)
 app.include_router(uploads.router)
 app.include_router(system.router)
