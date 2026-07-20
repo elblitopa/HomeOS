@@ -1,0 +1,6 @@
+{
+  "name": "Media Downloader",
+  "folder": "C:\\Users\\pablo\\OneDrive\\Documents\\Proyectos\\Media Downloader\\media-downloader",
+  "launcher": "iniciar.bat",
+  "port": 8080
+}

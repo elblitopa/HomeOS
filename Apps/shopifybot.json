@@ -1,0 +1,6 @@
+{
+  "name": "ShopifyBot",
+  "folder": "C:\\Users\\pablo\\OneDrive\\Documents\\Proyectos\\TESTING\\shopifybot_panel",
+  "launcher": "Iniciar Panel.bat",
+  "port": 5000
+}
