@@ -36,6 +36,22 @@ body,
   height: 100%;
 }
 
+html {
+  /* sensacion de app: sin zoom por doble tap y sin ajuste de texto al rotar */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* iOS hace auto-zoom al enfocar inputs con fuente < 16px; en movil los
+   subimos a 16px para que el teclado no dispare zoom. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 body {
   margin: 0;
   color: var(--color-ink);
