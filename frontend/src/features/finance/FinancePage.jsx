@@ -46,7 +46,7 @@ export default function FinancePage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`rounded-xl px-4 py-1.5 text-sm font-medium transition ${
-              tab === t.key ? "bg-white text-ink shadow-sm" : "text-ink-soft hover:text-ink"
+              tab === t.key ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
             }`}
           >
             {t.label}

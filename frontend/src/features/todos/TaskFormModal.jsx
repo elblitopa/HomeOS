@@ -14,7 +14,7 @@ const EMPTY = {
 };
 
 export const inputCls =
-  "w-full rounded-xl border border-glass-border bg-white/70 px-3 py-2 text-sm outline-none transition focus:border-accent";
+  "w-full rounded-xl border border-glass-border bg-surface/70 px-3 py-2 text-sm outline-none transition focus:border-accent";
 
 export function ReminderPicker({ value, onChange, disabled }) {
   const toggle = (v) =>

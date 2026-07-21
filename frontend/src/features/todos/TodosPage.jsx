@@ -117,7 +117,7 @@ export default function TodosPage() {
             return (
               <GlassCard
                 key={todo.id}
-                className="flex cursor-pointer items-center gap-3 p-3.5 transition hover:bg-white/75"
+                className="flex cursor-pointer items-center gap-3 p-3.5 transition hover:bg-surface/75"
               >
                 <input
                   type="checkbox"

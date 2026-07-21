@@ -111,7 +111,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                     {accs.map((a) => (
                       <GlassCard
                         key={a.id}
-                        className="cursor-pointer p-4 transition hover:bg-white/75"
+                        className="cursor-pointer p-4 transition hover:bg-surface/75"
                       >
                         <div onClick={() => setModal({ type: "account", data: a })}>
                           <div className="mb-2 flex items-center justify-between">
@@ -148,7 +148,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
               <button
                 key={q.label}
                 onClick={q.action}
-                className="rounded-xl border border-glass-border bg-white/60 px-2 py-2 text-sm font-medium transition hover:border-accent hover:text-accent"
+                className="rounded-xl border border-glass-border bg-surface/60 px-2 py-2 text-sm font-medium transition hover:border-accent hover:text-accent"
               >
                 {q.label}
               </button>
@@ -190,7 +190,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
           <div className="flex flex-col gap-3">
             {recurring.length === 0 && <p className="text-xs text-ink-soft">Sin deudas registradas 🎉</p>}
             {recurring.map((r) => (
-              <div key={r.id} className="rounded-xl border border-glass-border bg-white/50 p-3">
+              <div key={r.id} className="rounded-xl border border-glass-border bg-surface/50 p-3">
                 <div className="flex items-baseline justify-between">
                   <p className="cursor-pointer text-sm font-medium" onClick={() => setModal({ type: "recurring", data: r })}>
                     {r.name}
@@ -232,7 +232,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
           <div className="flex flex-col gap-2">
             {subs.length === 0 && <p className="text-xs text-ink-soft">Sin suscripciones.</p>}
             {subs.map((s) => (
-              <div key={s.id} className="flex items-center justify-between rounded-xl border border-glass-border bg-white/50 p-2.5">
+              <div key={s.id} className="flex items-center justify-between rounded-xl border border-glass-border bg-surface/50 p-2.5">
                 <div className="cursor-pointer" onClick={() => setModal({ type: "sub", data: s })}>
                   <p className="text-sm font-medium">{s.name}</p>
                   <p className="text-xs text-ink-soft">

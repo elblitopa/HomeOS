@@ -137,7 +137,7 @@ export default function ContentSection({ contextId }) {
               className={`flex w-56 shrink-0 flex-col gap-2 rounded-2xl border p-2.5 transition ${
                 dragOver === st.key
                   ? "border-accent bg-accent-soft/60"
-                  : "border-glass-border bg-white/40"
+                  : "border-glass-border bg-surface/40"
               }`}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -159,7 +159,7 @@ export default function ContentSection({ contextId }) {
                   draggable
                   onDragStart={(e) => e.dataTransfer.setData("text/plain", String(idea.id))}
                   onClick={() => setModal({ item: idea })}
-                  className="glass cursor-grab p-2.5 !rounded-xl transition hover:bg-white/80 active:cursor-grabbing"
+                  className="glass cursor-grab p-2.5 !rounded-xl transition hover:bg-surface/80 active:cursor-grabbing"
                 >
                   <p className="text-sm font-medium leading-snug">{idea.title}</p>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1">

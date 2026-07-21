@@ -251,7 +251,7 @@ export default function ProvidersTab({ contexts, contextsById, version }) {
           {providers.map((p) => {
             const ctx = p.context_id ? contextsById[p.context_id] : null;
             return (
-              <GlassCard key={p.id} className="cursor-pointer p-4 transition hover:bg-white/75">
+              <GlassCard key={p.id} className="cursor-pointer p-4 transition hover:bg-surface/75">
                 <div onClick={() => setModal({ provider: p })}>
                   <div className="mb-1 flex items-center justify-between">
                     <h3 className="font-semibold">{p.name}</h3>

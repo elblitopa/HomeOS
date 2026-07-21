@@ -237,7 +237,7 @@ export function TransactionModal({ open, tx, type, accounts, categories, context
             <button
               key={value}
               className={`flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition ${
-                form.type === value ? "bg-white shadow-sm" : "text-ink-soft"
+                form.type === value ? "bg-surface shadow-sm" : "text-ink-soft"
               }`}
               onClick={() => setForm((f) => ({ ...f, type: value }))}
             >

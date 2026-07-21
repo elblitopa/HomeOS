@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import usePing from "../../hooks/usePing.js";
+import useTheme from "../../hooks/useTheme.js";
 
 const NAV = [
   { to: "/", label: "Apps", icon: "🚀", enabled: true },
@@ -25,6 +26,7 @@ function PingDot() {
 }
 
 export default function Sidebar() {
+  const { theme, toggle } = useTheme();
   return (
     <aside className="glass m-4 mr-0 flex w-60 shrink-0 flex-col p-4 max-md:hidden">
       <div className="mb-6 flex items-center gap-2 px-2">
@@ -66,7 +68,16 @@ export default function Sidebar() {
       </nav>
 
       <div className="mt-auto flex items-center justify-between px-3 py-2 text-xs text-ink-soft">
-        <span>HomeOS · 8777</span>
+        <span className="flex items-center gap-2">
+          <button
+            onClick={toggle}
+            className="rounded-lg px-1 py-0.5 text-sm transition hover:bg-ink/5"
+            title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+          >
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
+          HomeOS
+        </span>
         <PingDot />
       </div>
     </aside>

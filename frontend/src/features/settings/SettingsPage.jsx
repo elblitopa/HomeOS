@@ -114,7 +114,7 @@ export default function SettingsPage() {
             {contexts.map((c) => (
               <div
                 key={c.id}
-                className="flex items-center gap-3 rounded-xl border border-glass-border bg-white/50 px-3 py-2"
+                className="flex items-center gap-3 rounded-xl border border-glass-border bg-surface/50 px-3 py-2"
               >
                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.color }} />
                 <span className="flex-1 text-sm font-medium">{c.name}</span>

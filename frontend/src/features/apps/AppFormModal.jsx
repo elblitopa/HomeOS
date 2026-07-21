@@ -74,7 +74,7 @@ export default function AppFormModal({ open, app, onClose, onSaved }) {
   };
 
   const inputCls =
-    "w-full rounded-xl border border-glass-border bg-white/70 px-3 py-2 text-sm outline-none transition focus:border-accent";
+    "w-full rounded-xl border border-glass-border bg-surface/70 px-3 py-2 text-sm outline-none transition focus:border-accent";
 
   return (
     <Modal open={open} onClose={onClose} title={app ? "Editar app" : "Agregar app"}>
@@ -105,7 +105,7 @@ export default function AppFormModal({ open, app, onClose, onSaved }) {
         </label>
 
         {browse && (
-          <div className="max-h-44 overflow-y-auto rounded-xl border border-glass-border bg-white/60 p-2 text-sm">
+          <div className="max-h-44 overflow-y-auto rounded-xl border border-glass-border bg-surface/60 p-2 text-sm">
             {browse.parent && (
               <button
                 className="block w-full rounded-lg px-2 py-1 text-left hover:bg-accent-soft"

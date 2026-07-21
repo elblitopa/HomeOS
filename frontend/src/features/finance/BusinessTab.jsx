@@ -454,7 +454,7 @@ export default function BusinessTab({ contexts, contextsById, version }) {
               key={s.key}
               onClick={() => setSection(s.key)}
               className={`rounded-lg px-3 py-1 text-xs font-medium transition ${
-                section === s.key ? "bg-white shadow-sm" : "text-ink-soft"
+                section === s.key ? "bg-surface shadow-sm" : "text-ink-soft"
               }`}
             >
               {s.label}

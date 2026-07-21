@@ -177,7 +177,7 @@ export default function NotesPage() {
             return (
               <GlassCard
                 key={n.id}
-                className="flex cursor-pointer flex-col p-4 transition hover:bg-white/75"
+                className="flex cursor-pointer flex-col p-4 transition hover:bg-surface/75"
               >
                 <div className="mb-1 flex items-start justify-between gap-2" onClick={() => setModal({ note: n })}>
                   <h3 className="font-semibold leading-tight">

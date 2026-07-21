@@ -203,7 +203,7 @@ export default function CalendarPage() {
               return (
                 <GlassCard
                   key={ev.id}
-                  className="flex cursor-pointer items-center gap-3 p-3 transition hover:bg-white/75"
+                  className="flex cursor-pointer items-center gap-3 p-3 transition hover:bg-surface/75"
                 >
                   <span
                     className="h-8 w-1.5 shrink-0 rounded-full"

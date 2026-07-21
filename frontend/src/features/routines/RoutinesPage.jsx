@@ -49,7 +49,7 @@ function MonthChart({ days }) {
               <title>{`${d.date}: ${d.done}/${d.total}`}</title>
             </rect>
             {i % 5 === 0 && (
-              <text x={x + barWidth / 2} y={height + 14} textAnchor="middle" fontSize="9" fill="#6b6b70">
+              <text x={x + barWidth / 2} y={height + 14} textAnchor="middle" fontSize="9" fill="var(--color-ink-soft)">
                 {d.date.slice(8)}
               </text>
             )}
@@ -145,7 +145,7 @@ export default function RoutinesPage() {
                     className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
                       r.done_today
                         ? "border-ok/30 bg-ok/5"
-                        : "border-glass-border bg-white/50 hover:border-accent/40"
+                        : "border-glass-border bg-surface/50 hover:border-accent/40"
                     }`}
                   >
                     <span

@@ -42,7 +42,7 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
   useEffect(refresh, [refresh, version]);
 
   const selectCls =
-    "rounded-xl border border-glass-border bg-white/70 px-2.5 py-1.5 text-sm outline-none";
+    "rounded-xl border border-glass-border bg-surface/70 px-2.5 py-1.5 text-sm outline-none";
 
   const badge = (tx) => {
     if (tx.type === "ingreso") return <span className="font-semibold text-ok">+{fmtMoney(tx.amount)}</span>;
@@ -109,7 +109,7 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
             return (
               <div
                 key={tx.id}
-                className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-white/60"
+                className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-surface/60"
                 onClick={() => setModal({ tx })}
               >
                 <span className="text-lg">{cat?.icon || (tx.type === "transferencia" ? "⇄" : "💸")}</span>

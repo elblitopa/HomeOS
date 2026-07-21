@@ -12,10 +12,10 @@ export default function Modal({ open, onClose, title, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="glass max-h-[90vh] w-full max-w-lg overflow-y-auto bg-white/85 p-6">
+      <div className="glass max-h-[90vh] w-full max-w-lg overflow-y-auto bg-surface/90 p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
