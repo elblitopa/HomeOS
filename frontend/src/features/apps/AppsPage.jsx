@@ -24,7 +24,7 @@ export default function AppsPage() {
   const runningCount = Object.values(status).filter((s) => s.running).length;
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-8">
       <TopBar
         title="Apps"
         subtitle={

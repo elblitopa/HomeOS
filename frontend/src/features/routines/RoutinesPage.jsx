@@ -116,7 +116,7 @@ export default function RoutinesPage() {
     : 0;
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-8">
       <TopBar title="Rutinas" subtitle={encouragement(done, total)}>
         <Button onClick={() => setModal({})}>＋ Rutina</Button>
       </TopBar>

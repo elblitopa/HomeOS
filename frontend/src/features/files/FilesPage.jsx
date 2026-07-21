@@ -70,7 +70,7 @@ export default function FilesPage() {
 
   return (
     <div
-      className="min-h-full p-6 md:p-8"
+      className="min-h-full p-4 md:p-8"
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);

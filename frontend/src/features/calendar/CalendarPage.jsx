@@ -88,7 +88,7 @@ export default function CalendarPage() {
   const todayKey = dayKey(today);
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-8">
       <TopBar title="Calendario" subtitle={`${events.length} eventos este mes`}>
         <Button onClick={() => openNew()}>＋ Nuevo evento</Button>
       </TopBar>
@@ -151,7 +151,7 @@ export default function CalendarPage() {
             return (
               <div
                 key={key}
-                className={`min-h-24 cursor-pointer rounded-xl border border-transparent p-1.5 transition hover:border-accent/40 hover:bg-accent-soft/40 ${
+                className={`min-h-16 cursor-pointer rounded-xl border border-transparent p-1 transition hover:border-accent/40 hover:bg-accent-soft/40 md:min-h-24 md:p-1.5 ${
                   inMonth ? "" : "opacity-35"
                 }`}
                 onClick={() => openNew(key)}

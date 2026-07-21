@@ -37,7 +37,7 @@ export default function FinancePage() {
   const shared = { accounts, categories, contexts, contextsById: byId, reload, version };
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-8">
       <TopBar title="Finanzas & Negocios" />
 
       <div className="mb-6 flex flex-wrap gap-1 rounded-2xl bg-ink/5 p-1 md:inline-flex">

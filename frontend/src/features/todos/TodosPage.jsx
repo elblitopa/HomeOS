@@ -45,7 +45,7 @@ export default function TodosPage() {
     }`;
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-8">
       <TopBar
         title="Tareas"
         subtitle={`${todos.filter((t) => t.status === "pendiente").length} pendientes`}

@@ -13,7 +13,7 @@ export default function App() {
   return (
     <div className="homeos-bg flex h-full">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto max-md:pb-24">
         <Routes>
           <Route path="/" element={<AppsPage />} />
           <Route path="/calendario" element={<CalendarPage />} />

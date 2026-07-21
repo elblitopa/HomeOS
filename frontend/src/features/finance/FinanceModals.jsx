@@ -476,7 +476,7 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
           Nombre
           <input className={inputCls} value={form.name} onChange={set("name")} placeholder="Préstamo auto, MSI pantalla…" autoFocus />
         </label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Deuda total
             <input type="number" step="0.01" className={inputCls} value={form.total_amount} onChange={set("total_amount")} />
@@ -490,7 +490,7 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
             <input type="number" min="1" className={inputCls} value={form.installments_total} onChange={set("installments_total")} />
           </label>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Cuotas ya pagadas
             <input type="number" min="0" className={inputCls} value={form.installments_paid} onChange={set("installments_paid")} />
@@ -510,7 +510,7 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Siguiente pago
             <input type="date" className={inputCls} value={form.next_due} onChange={set("next_due")} />
@@ -592,7 +592,7 @@ export function SubscriptionModal({ open, item, accounts, categories, onClose, o
           Nombre
           <input className={inputCls} value={form.name} onChange={set("name")} placeholder="Netflix, Spotify, hosting…" autoFocus />
         </label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Monto
             <input type="number" step="0.01" className={inputCls} value={form.amount} onChange={set("amount")} />

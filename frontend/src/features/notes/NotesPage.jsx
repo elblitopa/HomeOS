@@ -150,7 +150,7 @@ export default function NotesPage() {
   };
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-8">
       <TopBar title="Notas" subtitle={`${notes.length} notas`}>
         <Button onClick={() => setModal({})}>＋ Nueva nota</Button>
       </TopBar>

@@ -73,7 +73,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-8">
       <TopBar title="Ajustes" />
 
       <div className="flex max-w-2xl flex-col gap-6">

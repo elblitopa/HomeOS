@@ -220,7 +220,7 @@ export default function ContentSection({ contextId }) {
             <input className={inputCls} value={form.title || ""} onChange={set("title")} autoFocus />
           </label>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="flex flex-col gap-1 text-sm font-medium">
               Status
               <select className={inputCls} value={form.status} onChange={set("status")}>
