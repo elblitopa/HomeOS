@@ -11,9 +11,11 @@ import TodosPage from "./features/todos/TodosPage.jsx";
 
 export default function App() {
   return (
-    <div className="homeos-bg flex h-full">
+    // En movil el documento scrollea nativo (Safari deja pasar el contenido
+    // tras sus barras translucidas); en desktop el scroll vive dentro de main.
+    <div className="homeos-bg flex min-h-full md:h-full">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto max-md:pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+      <main className="min-w-0 flex-1 md:overflow-y-auto max-md:pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
         <Routes>
           <Route path="/" element={<AppsPage />} />
           <Route path="/calendario" element={<CalendarPage />} />
