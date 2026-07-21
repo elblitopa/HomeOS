@@ -57,7 +57,7 @@ function MobileNav() {
           onClick={() => setMoreOpen(false)}
         >
           <div
-            className="glass absolute inset-x-3 bottom-20 bg-surface/90 p-2"
+            className="glass absolute inset-x-3 bg-surface/90 p-2 [bottom:calc(5rem+env(safe-area-inset-bottom,0px))]"
             onClick={(e) => e.stopPropagation()}
           >
             {extra.map((item) => (
@@ -85,7 +85,7 @@ function MobileNav() {
         </div>
       )}
 
-      <nav className="glass fixed inset-x-3 bottom-3 z-50 flex justify-around bg-surface/85 px-1 py-1.5">
+      <nav className="glass fixed inset-x-3 z-50 flex justify-around bg-surface/85 px-1 py-1.5 [bottom:calc(0.75rem+env(safe-area-inset-bottom,0px))]">
         {main.map((item) => (
           <NavLink
             key={item.to}

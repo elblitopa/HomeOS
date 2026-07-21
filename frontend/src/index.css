@@ -40,6 +40,8 @@ html {
   /* sensacion de app: sin zoom por doble tap y sin ajuste de texto al rotar */
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
+  /* que el overscroll y las zonas fuera del body tengan el color del tema */
+  background-color: var(--color-bg);
 }
 
 /* iOS hace auto-zoom al enfocar inputs con fuente < 16px; en movil los
@@ -63,6 +65,8 @@ body {
 /* Fondo con gradientes azules sutilisimos para que el blur del
    liquid glass tenga profundidad. */
 .homeos-bg {
+  /* en standalone (PWA) el contenido se extiende bajo el notch */
+  padding-top: env(safe-area-inset-top, 0px);
   background-color: var(--color-bg);
   background-image:
     radial-gradient(900px 600px at 8% -5%, rgba(35, 131, 226, 0.06), transparent 60%),
