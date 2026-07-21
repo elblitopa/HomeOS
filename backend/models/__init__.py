@@ -4,6 +4,7 @@ from backend.models.business import (
     BizMessage,
     BusinessInfo,
     Competitor,
+    ContentIdea,
     Provider,
 )
 from backend.models.context import Context
@@ -33,6 +34,7 @@ __all__ = [
     "BusinessInfo",
     "Category",
     "Competitor",
+    "ContentIdea",
     "Context",
     "DEFAULT_CATEGORIES",
     "Event",

@@ -5,9 +5,11 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import { fmtMoney, formatDateTime } from "../../lib/constants.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
+import ContentSection from "./ContentSection.jsx";
 
 const SECTIONS = [
   { key: "crm", label: "CRM" },
+  { key: "contenido", label: "Contenido" },
   { key: "competidores", label: "Competidores" },
   { key: "mensajes", label: "Mensajes" },
   { key: "docs", label: "Documentos" },
@@ -464,6 +466,7 @@ export default function BusinessTab({ contexts, contextsById, version }) {
       {contextId && (
         <>
           {section === "crm" && <CrmSection contextId={contextId} contextsById={contextsById} version={version} />}
+          {section === "contenido" && <ContentSection contextId={contextId} />}
           {section === "competidores" && <CompetitorsSection contextId={contextId} />}
           {section === "mensajes" && <MessagesSection contextId={contextId} />}
           {section === "docs" && <DocsSection contextId={contextId} />}

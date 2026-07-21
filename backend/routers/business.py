@@ -1,9 +1,18 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import BizDoc, BizMessage, BusinessInfo, Competitor, Provider
+from backend.models import (
+    BizDoc,
+    BizMessage,
+    BusinessInfo,
+    Competitor,
+    ContentIdea,
+    Provider,
+)
 
 router = APIRouter(prefix="/api/business", tags=["business"])
 
@@ -177,6 +186,81 @@ def delete_doc(doc_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(404, "Documento no encontrado")
     db.delete(doc)
+    db.commit()
+    return {"deleted": True}
+
+
+# ---------- creación de contenidos ----------
+
+CONTENT_STATUSES = {"idea", "guion", "grabando", "editando", "listo", "publicado"}
+
+
+class ContentPayload(BaseModel):
+    context_id: int
+    title: str = Field(min_length=1)
+    status: str = "idea"
+    format: str | None = None
+    publish_date: datetime | None = None
+    inspiration_url: str | None = None
+    drive_url: str | None = None
+    platforms: list[str] = []
+    notes: str | None = None
+    sort_order: int = 0
+
+
+class ContentStatusPayload(BaseModel):
+    status: str
+
+
+@router.get("/content")
+def list_content(context_id: int, db: Session = Depends(get_db)):
+    q = db.query(ContentIdea).filter(ContentIdea.context_id == context_id)
+    items = q.order_by(ContentIdea.sort_order, ContentIdea.updated_at.desc()).all()
+    return [c.to_dict() for c in items]
+
+
+@router.post("/content", status_code=201)
+def create_content(payload: ContentPayload, db: Session = Depends(get_db)):
+    if payload.status not in CONTENT_STATUSES:
+        raise HTTPException(400, "Status inválido")
+    idea = ContentIdea(**payload.model_dump())
+    db.add(idea)
+    db.commit()
+    return idea.to_dict()
+
+
+@router.put("/content/{idea_id}")
+def update_content(idea_id: int, payload: ContentPayload, db: Session = Depends(get_db)):
+    idea = db.get(ContentIdea, idea_id)
+    if not idea:
+        raise HTTPException(404, "Idea no encontrada")
+    if payload.status not in CONTENT_STATUSES:
+        raise HTTPException(400, "Status inválido")
+    for key, value in payload.model_dump().items():
+        setattr(idea, key, value)
+    db.commit()
+    return idea.to_dict()
+
+
+@router.post("/content/{idea_id}/status")
+def move_content(idea_id: int, payload: ContentStatusPayload, db: Session = Depends(get_db)):
+    """Mover de columna (drag & drop del kanban)."""
+    idea = db.get(ContentIdea, idea_id)
+    if not idea:
+        raise HTTPException(404, "Idea no encontrada")
+    if payload.status not in CONTENT_STATUSES:
+        raise HTTPException(400, "Status inválido")
+    idea.status = payload.status
+    db.commit()
+    return idea.to_dict()
+
+
+@router.delete("/content/{idea_id}")
+def delete_content(idea_id: int, db: Session = Depends(get_db)):
+    idea = db.get(ContentIdea, idea_id)
+    if not idea:
+        raise HTTPException(404, "Idea no encontrada")
+    db.delete(idea)
     db.commit()
     return {"deleted": True}
 
