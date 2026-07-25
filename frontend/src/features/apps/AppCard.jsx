@@ -4,7 +4,22 @@ import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import StatusPill from "../../components/ui/StatusPill.jsx";
 
-export default function AppCard({ app, status, onEdit, onChanged }) {
+function PingBadge({ ms }) {
+  if (ms == null) return null;
+  const color = ms < 60 ? "text-ok" : ms < 150 ? "text-amber-500" : "text-err";
+  const dot = ms < 60 ? "bg-ok" : ms < 150 ? "bg-amber-500" : "bg-err";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 ${color}`}
+      title="Latencia desde este dispositivo hacia la app"
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {ms} ms
+    </span>
+  );
+}
+
+export default function AppCard({ app, status, ping, onEdit, onChanged }) {
   const running = status?.running ?? app.running ?? false;
   const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,7 +96,10 @@ export default function AppCard({ app, status, onEdit, onChanged }) {
             )}
             <div>
               <h3 className="font-semibold leading-tight">{app.name}</h3>
-              <p className="text-xs text-ink-soft">Puerto {app.port}</p>
+              <p className="flex items-center gap-2 text-xs text-ink-soft">
+                Puerto {app.port}
+                {running && <PingBadge ms={ping} />}
+              </p>
             </div>
           </div>
           <StatusPill running={running} starting={starting && !running} />

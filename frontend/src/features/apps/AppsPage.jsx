@@ -2,12 +2,14 @@ import { useState } from "react";
 import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
+import useAppPings from "../../hooks/useAppPings.js";
 import useApps from "../../hooks/useApps.js";
 import AppCard from "./AppCard.jsx";
 import AppFormModal from "./AppFormModal.jsx";
 
 export default function AppsPage() {
   const { apps, status, loading, error, refresh } = useApps();
+  const pings = useAppPings(apps, status);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -61,6 +63,7 @@ export default function AppsPage() {
               key={app.id}
               app={app}
               status={status[app.id]}
+              ping={pings[app.id]}
               onEdit={() => openEdit(app)}
               onChanged={refresh}
             />
