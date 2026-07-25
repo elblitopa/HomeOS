@@ -4,9 +4,15 @@ title HomeOS
 cd /d "%~dp0"
 
 echo.
-echo  ============================================
-echo             HomeOS  -  Panel Central
-echo  ============================================
+echo  __  __                                  _____   ____
+echo /\ \/\ \                                /\  __`\/\  _`\
+echo \ \ \_\ \    ___     ___ ___      __    \ \ \/\ \ \,\L\_\
+echo  \ \  _  \  / __`\ /' __` __`\  /'__`\   \ \ \ \ \/_\__ \
+echo   \ \ \ \ \/\ \L\ \/\ \/\ \/\ \/\  __/    \ \ \_\ \/\ \L\ \
+echo    \ \_\ \_\ \____/\ \_\ \_\ \_\ \____\    \ \_____\ `\____\
+echo     \/_/\/_/\/___/  \/_/\/_/\/_/\/____/     \/_____/\/_____/
+echo.
+echo                    Panel Central - puerto 8777
 echo.
 
 REM --- Detectar Python ---
@@ -54,7 +60,7 @@ echo.
 
 start "" /min cmd /c "ping -n 3 127.0.0.1 >nul & start http://localhost:8777"
 
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8777
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8777 --no-access-log
 
 echo.
 echo El servidor se detuvo.
