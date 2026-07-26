@@ -80,9 +80,23 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
     onCommit: (ids) => apiPost("/api/finance/accounts/reorder", { ids }).catch(() => {}),
   });
 
-  // agrupar cuentas por tipo
-  const groups = {};
-  for (const a of ordered) (groups[a.kind] ||= []).push(a);
+  // Secciones: primero las cuentas de negocio (sin importar su tipo) y
+  // despues las personales agrupadas por tipo de cuenta.
+  const sections = [];
+  const negocio = ordered.filter((a) => a.scope === "negocio");
+  if (negocio.length) {
+    sections.push({ key: "negocio", icon: "💼", label: "Negocio", items: negocio });
+  }
+  // las personales se agrupan por tipo, respetando el orden en que aparecen
+  const porTipo = new Map();
+  for (const a of ordered) {
+    if (a.scope === "negocio") continue;
+    if (!porTipo.has(a.kind)) porTipo.set(a.kind, []);
+    porTipo.get(a.kind).push(a);
+  }
+  for (const [kind, items] of porTipo) {
+    sections.push({ key: kind, icon: kindOf(kind).icon, label: kindOf(kind).label, items });
+  }
 
   const totalMxn = accounts.reduce((sum, a) => sum + (a.balance_mxn ?? a.balance ?? 0), 0);
   const hasForeign = accounts.some((a) => a.currency !== BASE_CURRENCY);
@@ -99,8 +113,24 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      {/* navegación rápida: hasta arriba en móvil, columna derecha en escritorio */}
+      <GlassCard className="p-4 lg:col-start-2 lg:row-start-1">
+        <h2 className="mb-2 text-sm font-semibold text-ink-soft">Navegación rápida</h2>
+        <div className="grid grid-cols-2 gap-2">
+          {quick.map((q) => (
+            <button
+              key={q.label}
+              onClick={q.action}
+              className="rounded-xl border border-glass-border bg-surface/60 px-2 py-2 text-sm font-medium transition hover:border-accent hover:text-accent"
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
+      </GlassCard>
+
       {/* columna principal: cuentas */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 lg:col-start-1 lg:row-start-1 lg:row-span-2">
         {accounts.length > 0 && (
           <GlassCard className="p-4">
             <p className="text-xs text-ink-soft">
@@ -138,18 +168,18 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
             </GlassCard>
           ) : (
             <div className="flex flex-col gap-4">
-              {Object.entries(groups).map(([kind, accs]) => (
-                <div key={kind}>
+              {sections.map((section) => (
+                <div key={section.key}>
                   <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
-                    {kindOf(kind).icon} {kindOf(kind).label}
+                    {section.icon} {section.label}
                   </p>
                   <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
-                    {accs.map((a) => (
+                    {section.items.map((a) => (
                       <GlassCard
                         key={a.id}
                         banner={a.banner_path}
                         data-sort-id={a.id}
-                        data-sort-group={kind}
+                        data-sort-group={section.key}
                         className={`relative cursor-pointer transition hover:bg-surface/75 ${
                           draggingId === String(a.id)
                             ? "scale-[0.98] opacity-60 ring-2 ring-accent"
@@ -157,7 +187,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                         }`}
                       >
                         <button
-                          {...handleProps(a.id, kind)}
+                          {...handleProps(a.id, section.key)}
                           className="absolute right-1.5 top-1.5 z-10 rounded-lg bg-surface/70 px-1.5 py-0.5 text-xs text-ink-soft backdrop-blur transition hover:text-ink"
                           title="Arrastra para acomodar"
                         >
@@ -170,7 +200,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                               {a.name}
                             </span>
                             <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] uppercase text-ink-soft">
-                              {a.scope}
+                              {section.key === "negocio" ? kindOf(a.kind).label : a.scope}
                             </span>
                           </div>
                           <p className="text-xl font-bold">{fmtMoney(a.balance, a.currency)}</p>
@@ -194,23 +224,8 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
         </div>
       </div>
 
-      {/* navegación rápida */}
-      <div className="flex flex-col gap-4">
-        <GlassCard className="p-4">
-          <h2 className="mb-2 text-sm font-semibold text-ink-soft">Navegación rápida</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {quick.map((q) => (
-              <button
-                key={q.label}
-                onClick={q.action}
-                className="rounded-xl border border-glass-border bg-surface/60 px-2 py-2 text-sm font-medium transition hover:border-accent hover:text-accent"
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-        </GlassCard>
-
+      {/* metas, deudas y suscripciones */}
+      <div className="flex flex-col gap-4 lg:col-start-2 lg:row-start-2">
         <GlassCard className="p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink-soft">🎯 Metas</h2>
