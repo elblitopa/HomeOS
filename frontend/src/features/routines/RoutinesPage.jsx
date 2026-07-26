@@ -139,36 +139,42 @@ export default function RoutinesPage() {
             ) : (
               <div className="flex flex-col gap-1.5">
                 {routines.map((r) => (
-                  <button
+                  <div
                     key={r.id}
-                    onClick={() => toggle(r)}
-                    className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                    className={`flex items-center gap-1 rounded-xl border transition ${
                       r.done_today
                         ? "border-ok/30 bg-ok/5"
                         : "border-glass-border bg-surface/50 hover:border-accent/40"
                     }`}
                   >
-                    <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs text-white transition ${
-                        r.done_today ? "border-ok bg-ok" : "border-ink/20"
-                      }`}
+                    <button
+                      onClick={() => toggle(r)}
+                      className="flex flex-1 items-center gap-3 px-3 py-2.5 text-left"
                     >
-                      {r.done_today ? "✓" : ""}
-                    </span>
-                    <span className="text-lg">{r.icon}</span>
-                    <span className={`flex-1 text-sm font-medium ${r.done_today ? "text-ink-soft line-through" : ""}`}>
-                      {r.name}
-                    </span>
-                    <span
-                      className="text-xs text-ink-soft opacity-0 transition group-hover:opacity-100 hover:!opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setModal({ item: r });
-                      }}
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs text-white transition ${
+                          r.done_today ? "border-ok bg-ok" : "border-ink/20"
+                        }`}
+                      >
+                        {r.done_today ? "✓" : ""}
+                      </span>
+                      <span className="text-lg">{r.icon}</span>
+                      <span
+                        className={`flex-1 text-sm font-medium ${
+                          r.done_today ? "text-ink-soft line-through" : ""
+                        }`}
+                      >
+                        {r.name}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setModal({ item: r })}
+                      className="shrink-0 rounded-lg px-2.5 py-2 text-sm text-ink-soft transition hover:bg-ink/5"
+                      title={`Editar o eliminar "${r.name}"`}
                     >
                       ✏️
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
