@@ -4,14 +4,34 @@ import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import {
   ACCOUNT_KINDS,
+  BASE_CURRENCY,
   CONTEXT_COLORS,
   CURRENCIES,
   PERIODS,
   toInputValue,
 } from "../../lib/constants.js";
+
 import { inputCls } from "../todos/TaskFormModal.jsx";
 
 const selectCls = inputCls;
+
+/** Selector de divisa: solo las que ya existen en la pestaña Divisas,
+ *  porque son las únicas que se pueden convertir a MXN. */
+function CurrencySelect({ value, onChange, rates }) {
+  const codes = rates.length ? rates.map((r) => r.code) : [BASE_CURRENCY];
+  return (
+    <label className="flex flex-col gap-1 text-sm font-medium">
+      Divisa
+      <select className={selectCls} value={value} onChange={onChange}>
+        {codes.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function Footer({ onDelete, onClose, onSave, saving, deleteLabel = "Eliminar" }) {
   return (
@@ -495,7 +515,7 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
 
 // ---------- Deuda / pago recurrente ----------
 
-export function RecurringModal({ open, item, accounts, categories, onClose, onSaved }) {
+export function RecurringModal({ open, item, accounts, categories, rates = [], onClose, onSaved }) {
   const { form, set, error, setError, saving, setSaving } = useForm(open, {
     name: item?.name || "",
     total_amount: item?.total_amount ?? "",
@@ -503,6 +523,7 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
     installments_total: item?.installments_total ?? "",
     installments_paid: item?.installments_paid ?? 0,
     paid_amount: item?.paid_amount ?? 0,
+    currency: item?.currency || BASE_CURRENCY,
     frequency: item?.frequency || "mensual",
     category_id: item?.category_id ?? "",
     account_id: item?.account_id ?? "",
@@ -521,6 +542,7 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
         installments_total: Number(form.installments_total),
         installments_paid: Number(form.installments_paid) || 0,
         paid_amount: Number(form.paid_amount) || 0,
+        currency: form.currency,
         frequency: form.frequency,
         category_id: form.category_id ? Number(form.category_id) : null,
         account_id: form.account_id ? Number(form.account_id) : null,
@@ -569,9 +591,13 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
             <input type="number" min="0" className={inputCls} value={form.installments_paid} onChange={set("installments_paid")} />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Ya pagado ($)
+            Ya pagado
             <input type="number" step="0.01" className={inputCls} value={form.paid_amount} onChange={set("paid_amount")} />
           </label>
+          <CurrencySelect value={form.currency} onChange={set("currency")} rates={rates} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Frecuencia
             <select className={selectCls} value={form.frequency} onChange={set("frequency")}>
@@ -582,8 +608,6 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
               ))}
             </select>
           </label>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Siguiente pago
             <input type="date" className={inputCls} value={form.next_due} onChange={set("next_due")} />
@@ -599,18 +623,20 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            Cuenta de pago
-            <select className={selectCls} value={form.account_id} onChange={set("account_id")}>
-              <option value="">—</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
+
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Cuenta de pago
+          <select className={selectCls} value={form.account_id} onChange={set("account_id")}>
+            <option value="">—</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.currency})
+              </option>
+            ))}
+          </select>
+        </label>
+
         {error && <p className="text-sm text-err">{error}</p>}
         <Footer onDelete={item ? remove : null} onClose={onClose} onSave={save} saving={saving} />
       </div>
@@ -620,10 +646,11 @@ export function RecurringModal({ open, item, accounts, categories, onClose, onSa
 
 // ---------- Suscripción ----------
 
-export function SubscriptionModal({ open, item, accounts, categories, onClose, onSaved }) {
+export function SubscriptionModal({ open, item, accounts, categories, rates = [], onClose, onSaved }) {
   const { form, set, error, setError, saving, setSaving } = useForm(open, {
     name: item?.name || "",
     amount: item?.amount ?? "",
+    currency: item?.currency || BASE_CURRENCY,
     period: item?.period || "mensual",
     category_id: item?.category_id ?? "",
     account_id: item?.account_id ?? "",
@@ -637,6 +664,7 @@ export function SubscriptionModal({ open, item, accounts, categories, onClose, o
       const payload = {
         name: form.name.trim(),
         amount: Number(form.amount),
+        currency: form.currency,
         period: form.period,
         category_id: form.category_id ? Number(form.category_id) : null,
         account_id: form.account_id ? Number(form.account_id) : null,
@@ -670,6 +698,7 @@ export function SubscriptionModal({ open, item, accounts, categories, onClose, o
             Monto
             <input type="number" step="0.01" className={inputCls} value={form.amount} onChange={set("amount")} />
           </label>
+          <CurrencySelect value={form.currency} onChange={set("currency")} rates={rates} />
           <label className="flex flex-col gap-1 text-sm font-medium">
             Periodo
             <select className={selectCls} value={form.period} onChange={set("period")}>
@@ -680,11 +709,11 @@ export function SubscriptionModal({ open, item, accounts, categories, onClose, o
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            Siguiente cobro
-            <input type="date" className={inputCls} value={form.next_due} onChange={set("next_due")} />
-          </label>
         </div>
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Siguiente cobro
+          <input type="date" className={inputCls} value={form.next_due} onChange={set("next_due")} />
+        </label>
         <div className="grid grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Categoría
@@ -703,7 +732,7 @@ export function SubscriptionModal({ open, item, accounts, categories, onClose, o
               <option value="">—</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  {a.name} ({a.currency})
                 </option>
               ))}
             </select>

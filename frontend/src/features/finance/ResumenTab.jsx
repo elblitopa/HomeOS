@@ -30,6 +30,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
   const [goals, setGoals] = useState([]);
   const [recurring, setRecurring] = useState([]);
   const [subs, setSubs] = useState([]);
+  const [rates, setRates] = useState([]);
   const [today, setToday] = useState({ ingresos: 0, egresos: 0 });
   const [modal, setModal] = useState(null); // {type, data?}
 
@@ -37,6 +38,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
     apiGet("/api/finance/goals").then(setGoals).catch(() => {});
     apiGet("/api/finance/recurring").then(setRecurring).catch(() => {});
     apiGet("/api/finance/subscriptions").then(setSubs).catch(() => {});
+    apiGet("/api/finance/rates").then(setRates).catch(() => {});
     apiGet("/api/finance/summary").then((s) => setToday(s.today)).catch(() => {});
   }, [version]);
 
@@ -46,14 +48,23 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
     reload();
   };
 
+  // si el cobro es en otra divisa, avisar a cuánto se va a convertir hoy
+  const confirmarCobro = (label, item, monto, montoMxn) => {
+    const base = `¿Registrar ${label} de ${fmtMoney(monto, item.currency)} de "${item.name}"?`;
+    return item.currency && item.currency !== BASE_CURRENCY
+      ? `${base}\n\nAl tipo de cambio de hoy son ${fmtMoney(montoMxn)} MXN.`
+      : base;
+  };
+
   const payRecurring = async (item) => {
-    if (!confirm(`¿Registrar pago de ${fmtMoney(item.installment_amount)} de "${item.name}"?`)) return;
+    const msg = confirmarCobro("pago", item, item.installment_amount, item.installment_amount_mxn);
+    if (!confirm(msg)) return;
     await apiPost(`/api/finance/recurring/${item.id}/pay`);
     reload();
   };
 
   const paySub = async (item) => {
-    if (!confirm(`¿Registrar cobro de ${fmtMoney(item.amount)} de "${item.name}"?`)) return;
+    if (!confirm(confirmarCobro("cobro", item, item.amount, item.amount_mxn))) return;
     await apiPost(`/api/finance/subscriptions/${item.id}/pay`);
     reload();
   };
@@ -305,8 +316,15 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                 </div>
                 <ProgressBar value={r.progress} color={r.done ? "#2f9e44" : "#2383e2"} />
                 <p className="mt-1 text-xs text-ink-soft">
-                  Pagado {fmtMoney(r.paid_amount)} · Pendiente {fmtMoney(r.pending_amount)}
+                  Pagado {fmtMoney(r.paid_amount, r.currency)} · Pendiente{" "}
+                  {fmtMoney(r.pending_amount, r.currency)}
                 </p>
+                {r.currency !== BASE_CURRENCY && (
+                  <p className="text-xs font-medium text-accent">
+                    Cuota {fmtMoney(r.installment_amount, r.currency)} ≈{" "}
+                    {fmtMoney(r.installment_amount_mxn)} MXN
+                  </p>
+                )}
                 {!r.done && (
                   <div className="mt-1.5 flex items-center justify-between">
                     <p className="text-xs text-ink-soft">
@@ -340,10 +358,15 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                 <div className="cursor-pointer" onClick={() => setModal({ type: "sub", data: s })}>
                   <p className="text-sm font-medium">{s.name}</p>
                   <p className="text-xs text-ink-soft">
-                    {fmtMoney(s.amount)} · {periodLabel(s.period)}
+                    {fmtMoney(s.amount, s.currency)} · {periodLabel(s.period)}
                     {s.next_due &&
                       ` · ${s.days_left <= 0 ? "⚠️ hoy" : `en ${s.days_left} día${s.days_left > 1 ? "s" : ""}`}`}
                   </p>
+                  {s.currency !== BASE_CURRENCY && (
+                    <p className="text-xs font-medium text-accent">
+                      ≈ {fmtMoney(s.amount_mxn)} MXN
+                    </p>
+                  )}
                 </div>
                 <button className="text-xs font-medium text-accent" onClick={() => paySub(s)}>
                   Cobrado
@@ -372,6 +395,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
         item={modal?.data}
         accounts={accounts}
         categories={categories}
+        rates={rates}
         onClose={close}
         onSaved={saved}
       />
@@ -380,6 +404,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
         item={modal?.data}
         accounts={accounts}
         categories={categories}
+        rates={rates}
         onClose={close}
         onSaved={saved}
       />

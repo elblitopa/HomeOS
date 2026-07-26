@@ -354,24 +354,48 @@ class RecurringPayload(BaseModel):
     installments_total: int = Field(gt=0)
     installments_paid: int = 0
     paid_amount: float = 0.0
+    currency: str = BASE_CURRENCY
     frequency: str = "mensual"
     category_id: int | None = None
     account_id: int | None = None
     next_due: datetime | None = None
 
 
+def _check_currency(code: str | None, db: Session) -> str:
+    """Solo se aceptan divisas que ya existan en la pestaña Divisas, para no
+    guardar montos que despues no se puedan convertir."""
+    code = (code or BASE_CURRENCY).upper()
+    if code != BASE_CURRENCY and not db.get(ExchangeRate, code):
+        raise HTTPException(
+            400, f"Primero agrega {code} en la pestaña Divisas para poder convertirla."
+        )
+    return code
+
+
+def _charge_amount(item_currency: str, account: Account | None, amount: float, db: Session):
+    """Convierte el monto pactado a la divisa de la cuenta que lo paga.
+    Regresa (monto_en_la_cuenta, tipo_de_cambio_de_la_cuenta)."""
+    acc_currency = account.currency if account else BASE_CURRENCY
+    item_rate = fx.current_rate(db, item_currency)
+    acc_rate = fx.current_rate(db, acc_currency) or 1.0
+    return round(amount * item_rate / acc_rate, 2), acc_rate
+
+
 @router.get("/recurring")
 def list_recurring(db: Session = Depends(get_db)):
+    rates = {r.code: r.rate_to_mxn for r in db.query(ExchangeRate).all()}
     items = db.query(RecurringPayment).order_by(RecurringPayment.next_due).all()
-    return [r.to_dict() for r in items]
+    return [r.to_dict(rates.get(r.currency or BASE_CURRENCY, 1.0)) for r in items]
 
 
 @router.post("/recurring", status_code=201)
 def create_recurring(payload: RecurringPayload, db: Session = Depends(get_db)):
-    item = RecurringPayment(**payload.model_dump())
+    data = payload.model_dump()
+    data["currency"] = _check_currency(data.get("currency"), db)
+    item = RecurringPayment(**data)
     db.add(item)
     db.commit()
-    return item.to_dict()
+    return item.to_dict(fx.current_rate(db, item.currency))
 
 
 @router.put("/recurring/{item_id}")
@@ -379,10 +403,12 @@ def update_recurring(item_id: int, payload: RecurringPayload, db: Session = Depe
     item = db.get(RecurringPayment, item_id)
     if not item:
         raise HTTPException(404, "Pago recurrente no encontrado")
-    for key, value in payload.model_dump().items():
+    data = payload.model_dump()
+    data["currency"] = _check_currency(data.get("currency"), db)
+    for key, value in data.items():
         setattr(item, key, value)
     db.commit()
-    return item.to_dict()
+    return item.to_dict(fx.current_rate(db, item.currency))
 
 
 @router.post("/recurring/{item_id}/pay")
@@ -394,14 +420,21 @@ def pay_recurring(item_id: int, db: Session = Depends(get_db)):
     if item.installments_paid >= item.installments_total:
         raise HTTPException(409, "Esta deuda ya está liquidada")
     if item.account_id:
+        account = db.get(Account, item.account_id)
+        currency = item.currency or BASE_CURRENCY
+        amount, acc_rate = _charge_amount(currency, account, item.installment_amount, db)
+        description = f"Pago {item.installments_paid + 1}/{item.installments_total}: {item.name}"
+        if account and currency != account.currency:
+            description += f" ({item.installment_amount:g} {currency})"
         db.add(
             Transaction(
-                description=f"Pago {item.installments_paid + 1}/{item.installments_total}: {item.name}",
-                amount=item.installment_amount,
+                description=description,
+                amount=amount,
                 type="egreso",
                 category_id=item.category_id,
                 account_id=item.account_id,
                 occurred_at=datetime.now(),
+                fx_rate=acc_rate,
             )
         )
     item.installments_paid += 1
@@ -409,7 +442,7 @@ def pay_recurring(item_id: int, db: Session = Depends(get_db)):
     if item.next_due and item.installments_paid < item.installments_total:
         item.next_due = _add_months(item.next_due, PERIOD_MONTHS.get(item.frequency, 1))
     db.commit()
-    return item.to_dict()
+    return item.to_dict(fx.current_rate(db, item.currency))
 
 
 @router.delete("/recurring/{item_id}")
@@ -427,6 +460,7 @@ def delete_recurring(item_id: int, db: Session = Depends(get_db)):
 class SubscriptionPayload(BaseModel):
     name: str = Field(min_length=1)
     amount: float = Field(gt=0)
+    currency: str = BASE_CURRENCY
     period: str = "mensual"
     category_id: int | None = None
     account_id: int | None = None
@@ -435,16 +469,19 @@ class SubscriptionPayload(BaseModel):
 
 @router.get("/subscriptions")
 def list_subscriptions(db: Session = Depends(get_db)):
+    rates = {r.code: r.rate_to_mxn for r in db.query(ExchangeRate).all()}
     items = db.query(Subscription).order_by(Subscription.next_due).all()
-    return [s.to_dict() for s in items]
+    return [s.to_dict(rates.get(s.currency or BASE_CURRENCY, 1.0)) for s in items]
 
 
 @router.post("/subscriptions", status_code=201)
 def create_subscription(payload: SubscriptionPayload, db: Session = Depends(get_db)):
-    item = Subscription(**payload.model_dump())
+    data = payload.model_dump()
+    data["currency"] = _check_currency(data.get("currency"), db)
+    item = Subscription(**data)
     db.add(item)
     db.commit()
-    return item.to_dict()
+    return item.to_dict(fx.current_rate(db, item.currency))
 
 
 @router.put("/subscriptions/{item_id}")
@@ -452,10 +489,12 @@ def update_subscription(item_id: int, payload: SubscriptionPayload, db: Session 
     item = db.get(Subscription, item_id)
     if not item:
         raise HTTPException(404, "Suscripción no encontrada")
-    for key, value in payload.model_dump().items():
+    data = payload.model_dump()
+    data["currency"] = _check_currency(data.get("currency"), db)
+    for key, value in data.items():
         setattr(item, key, value)
     db.commit()
-    return item.to_dict()
+    return item.to_dict(fx.current_rate(db, item.currency))
 
 
 @router.post("/subscriptions/{item_id}/pay")
@@ -465,20 +504,27 @@ def pay_subscription(item_id: int, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(404, "Suscripción no encontrada")
     if item.account_id:
+        account = db.get(Account, item.account_id)
+        currency = item.currency or BASE_CURRENCY
+        amount, acc_rate = _charge_amount(currency, account, item.amount, db)
+        description = f"Suscripción: {item.name}"
+        if account and currency != account.currency:
+            description += f" ({item.amount:g} {currency})"
         db.add(
             Transaction(
-                description=f"Suscripción: {item.name}",
-                amount=item.amount,
+                description=description,
+                amount=amount,
                 type="egreso",
                 category_id=item.category_id,
                 account_id=item.account_id,
                 occurred_at=datetime.now(),
+                fx_rate=acc_rate,
             )
         )
     if item.next_due:
         item.next_due = _add_months(item.next_due, PERIOD_MONTHS.get(item.period, 1))
     db.commit()
-    return item.to_dict()
+    return item.to_dict(fx.current_rate(db, item.currency))
 
 
 @router.delete("/subscriptions/{item_id}")

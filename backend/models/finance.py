@@ -185,6 +185,8 @@ class RecurringPayment(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     total_amount: Mapped[float] = mapped_column(Float, nullable=False)
     installment_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    # divisa en la que esta pactada la deuda (puede no ser la de la cuenta)
+    currency: Mapped[str] = mapped_column(String, default=BASE_CURRENCY)
     installments_total: Mapped[int] = mapped_column(Integer, nullable=False)
     installments_paid: Mapped[int] = mapped_column(Integer, default=0)
     paid_amount: Mapped[float] = mapped_column(Float, default=0.0)
@@ -198,7 +200,7 @@ class RecurringPayment(Base):
     next_due: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, rate: float = 1.0) -> dict:
         pending = max(0.0, self.total_amount - self.paid_amount)
         days_left = None
         if self.next_due:
@@ -206,6 +208,8 @@ class RecurringPayment(Base):
         return {
             "id": self.id,
             "name": self.name,
+            "currency": self.currency or BASE_CURRENCY,
+            "installment_amount_mxn": round(self.installment_amount * rate, 2),
             "total_amount": self.total_amount,
             "installment_amount": self.installment_amount,
             "installments_total": self.installments_total,
@@ -228,6 +232,8 @@ class Subscription(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
+    # divisa del cobro (ej. Netflix en USD cargado a una tarjeta en MXN)
+    currency: Mapped[str] = mapped_column(String, default=BASE_CURRENCY)
     period: Mapped[str] = mapped_column(String, default="mensual")
     category_id: Mapped[int | None] = mapped_column(
         ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
@@ -238,7 +244,7 @@ class Subscription(Base):
     next_due: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, rate: float = 1.0) -> dict:
         days_left = None
         if self.next_due:
             days_left = (self.next_due.date() - datetime.now().date()).days
@@ -246,6 +252,8 @@ class Subscription(Base):
             "id": self.id,
             "name": self.name,
             "amount": self.amount,
+            "currency": self.currency or BASE_CURRENCY,
+            "amount_mxn": round(self.amount * rate, 2),
             "period": self.period,
             "category_id": self.category_id,
             "account_id": self.account_id,
