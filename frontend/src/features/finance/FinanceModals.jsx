@@ -395,7 +395,7 @@ export function TransactionModal({ open, tx, type, accounts, categories, context
 // ---------- Meta ----------
 
 export function GoalModal({ open, goal, onClose, onSaved }) {
-  const { form, set, error, setError, saving, setSaving } = useForm(open, {
+  const { form, set, setForm, error, setError, saving, setSaving } = useForm(open, {
     name: goal?.name || "",
     target_amount: goal?.target_amount ?? "",
     deadline: goal?.deadline ? goal.deadline.slice(0, 10) : "",
