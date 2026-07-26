@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api/client.js";
 import useCardSort from "../../hooks/useCardSort.js";
 import Button from "../../components/ui/Button.jsx";
+import Carousel from "../../components/ui/Carousel.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { BASE_CURRENCY, fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
 import {
@@ -227,7 +228,9 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
       </div>
 
       {/* metas, deudas y suscripciones */}
-      <div className="flex flex-col gap-4 lg:col-start-2 lg:row-start-2 lg:self-start">
+      {/* min-w-0: sin esto el carrusel de metas estira la columna del grid
+          hasta el ancho de todas sus tarjetas y desborda la pantalla */}
+      <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-2 lg:self-start">
         <GlassCard className="p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink-soft">🎯 Metas</h2>
@@ -235,33 +238,50 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
               ＋
             </button>
           </div>
-          <div className="flex flex-col gap-3">
-            {goals.length === 0 && <p className="text-xs text-ink-soft">Sin metas todavía.</p>}
-            {goals.map((g) => (
-              <div key={g.id} className="cursor-pointer" onClick={() => setModal({ type: "goal", data: g })}>
-                <div className="mb-1 flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-medium">{g.name}</p>
-                  {g.deadline && (
-                    <p
-                      className={`shrink-0 text-xs ${
-                        g.days_left < 0 ? "font-medium text-err" : "text-ink-soft"
-                      }`}
-                    >
-                      {g.days_left < 0
-                        ? `venció hace ${Math.abs(g.days_left)} d`
-                        : g.days_left === 0
-                          ? "vence hoy"
-                          : `faltan ${g.days_left} d`}
-                    </p>
+          {goals.length === 0 ? (
+            <p className="text-xs text-ink-soft">Sin metas todavía.</p>
+          ) : (
+            <Carousel>
+              {goals.map((g) => (
+                <div
+                  key={g.id}
+                  className="w-[85%] shrink-0 cursor-pointer snap-start overflow-hidden rounded-xl border border-glass-border bg-surface/50 transition hover:border-accent/40"
+                  onClick={() => setModal({ type: "goal", data: g })}
+                >
+                  {g.banner_path ? (
+                    <div
+                      className="h-24 w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url(${g.banner_path})` }}
+                    />
+                  ) : (
+                    <div className="h-24 w-full bg-gradient-to-br from-accent/25 to-accent/5" />
                   )}
+                  <div className="p-3">
+                    <div className="mb-1 flex items-baseline justify-between gap-2">
+                      <p className="truncate text-sm font-medium">{g.name}</p>
+                      {g.deadline && (
+                        <p
+                          className={`shrink-0 text-xs ${
+                            g.days_left < 0 ? "font-medium text-err" : "text-ink-soft"
+                          }`}
+                        >
+                          {g.days_left < 0
+                            ? `venció hace ${Math.abs(g.days_left)} d`
+                            : g.days_left === 0
+                              ? "vence hoy"
+                              : `faltan ${g.days_left} d`}
+                        </p>
+                      )}
+                    </div>
+                    <ProgressBar value={g.progress} />
+                    <p className="mt-1 text-xs text-ink-soft">
+                      {fmtMoney(g.saved_amount)} de {fmtMoney(g.target_amount)} ({Math.round(g.progress * 100)}%)
+                    </p>
+                  </div>
                 </div>
-                <ProgressBar value={g.progress} />
-                <p className="mt-1 text-xs text-ink-soft">
-                  {fmtMoney(g.saved_amount)} de {fmtMoney(g.target_amount)} ({Math.round(g.progress * 100)}%)
-                </p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </Carousel>
+          )}
         </GlassCard>
 
         <GlassCard className="p-4">

@@ -43,6 +43,7 @@ MIGRATIONS = [
     ("exchange_rates", "kind", "kind VARCHAR DEFAULT 'fiat'"),
     ("exchange_rates", "api_id", "api_id VARCHAR"),
     ("goals", "deadline", "deadline DATETIME"),
+    ("goals", "banner_path", "banner_path VARCHAR"),
 ]
 
 # Columnas que dejaron de usarse (necesita SQLite 3.35+, incluido desde Python 3.11)

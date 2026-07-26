@@ -94,6 +94,14 @@ body {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
+/* filas deslizables sin barra de scroll a la vista */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }

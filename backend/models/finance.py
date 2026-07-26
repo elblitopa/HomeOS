@@ -157,6 +157,7 @@ class Goal(Base):
     target_amount: Mapped[float] = mapped_column(Float, nullable=False)
     # fecha limite opcional para alcanzar la meta
     deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    banner_path: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self, saved: float = 0.0) -> dict:
@@ -169,6 +170,7 @@ class Goal(Base):
             "target_amount": self.target_amount,
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "days_left": days_left,
+            "banner_path": self.banner_path,
             "saved_amount": saved,
             "progress": min(1.0, saved / self.target_amount) if self.target_amount else 0,
         }

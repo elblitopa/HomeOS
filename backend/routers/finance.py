@@ -306,6 +306,7 @@ class GoalPayload(BaseModel):
     name: str = Field(min_length=1)
     target_amount: float = Field(gt=0)
     deadline: datetime | None = None
+    banner_path: str | None = None
 
 
 @router.get("/goals")

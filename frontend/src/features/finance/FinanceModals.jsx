@@ -399,7 +399,22 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
     name: goal?.name || "",
     target_amount: goal?.target_amount ?? "",
     deadline: goal?.deadline ? goal.deadline.slice(0, 10) : "",
+    banner_path: goal?.banner_path || null,
   });
+
+  const uploadBanner = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    try {
+      const up = await apiUpload("/api/uploads/banner", file);
+      setForm((f) => ({ ...f, banner_path: up.path }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      e.target.value = "";
+    }
+  };
 
   const save = async () => {
     if (!form.name.trim() || !form.target_amount) return setError("Nombre y monto objetivo.");
@@ -409,6 +424,7 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
         name: form.name.trim(),
         target_amount: Number(form.target_amount),
         deadline: form.deadline ? `${form.deadline}T23:59` : null,
+        banner_path: form.banner_path,
       };
       if (goal) await apiPut(`/api/finance/goals/${goal.id}`, payload);
       else await apiPost("/api/finance/goals", payload);
@@ -443,6 +459,30 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
             <input type="date" className={inputCls} value={form.deadline} onChange={set("deadline")} />
           </label>
         </div>
+        <div className="flex flex-col gap-1.5 text-sm font-medium">
+          Banner (opcional)
+          {form.banner_path ? (
+            <div className="flex items-center gap-2">
+              <div
+                className="h-14 flex-1 rounded-xl bg-cover bg-center"
+                style={{ backgroundImage: `url(${form.banner_path})` }}
+              />
+              <button
+                className="text-err"
+                onClick={() => setForm((f) => ({ ...f, banner_path: null }))}
+                title="Quitar banner"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <input type="file" accept="image/*" className="text-xs" onChange={uploadBanner} />
+          )}
+          <span className="text-[11px] font-normal text-ink-soft">
+            Ideal 1200 × 400 px. Se recorta al centro para llenar la tarjeta.
+          </span>
+        </div>
+
         <p className="text-xs text-ink-soft">
           Para abonar a la meta usa una <b>Transferencia</b> desde una cuenta hacia la meta.
         </p>
