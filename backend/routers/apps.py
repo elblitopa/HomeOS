@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import APPS_MANIFEST_DIR
 from backend.database import get_db
-from backend.models import AppEntry
+from backend.models import AppEntry, get_setting, set_setting
 from backend.services import ports, process_manager
 
 router = APIRouter(prefix="/api/apps", tags=["apps"])
@@ -185,10 +185,33 @@ def import_manifests(db: Session = Depends(get_db)):
     return {"imported": run_manifest_import(db)}
 
 
+IMPORTED_KEY = "imported_manifests"
+
+
+def _app_key(folder: str, launcher: str) -> tuple[str, str]:
+    """Identidad real de una app: a donde apunta, no como se llama.
+    El nombre se puede editar y el slug cambia con el, asi que no sirven."""
+    return (os.path.normcase(os.path.normpath(folder)), launcher.strip().lower())
+
+
 def run_manifest_import(db: Session) -> list[str]:
-    """Escanea HomeOS/Apps/*.json y registra apps nuevas (por slug)."""
+    """Escanea HomeOS/Apps/*.json y registra las apps que falten.
+
+    Cada archivo se importa UNA sola vez: si despues borras la app desde la
+    interfaz, no vuelve a aparecer sola en el siguiente arranque.
+    """
+    try:
+        already = set(json.loads(get_setting(db, IMPORTED_KEY) or "[]"))
+    except json.JSONDecodeError:
+        already = set()
+
+    registradas = {_app_key(a.folder, a.launcher) for a in db.query(AppEntry).all()}
     imported: list[str] = []
+    seen = set(already)
+
     for file in sorted(APPS_MANIFEST_DIR.glob("*.json")):
+        if file.name in already:
+            continue
         try:
             data = json.loads(file.read_text(encoding="utf-8"))
             name = data["name"]
@@ -197,13 +220,30 @@ def run_manifest_import(db: Session) -> list[str]:
             port = int(data["port"])
         except (json.JSONDecodeError, KeyError, ValueError, OSError):
             continue
-        slug = slugify(name)
-        if db.query(AppEntry).filter(AppEntry.slug == slug).first():
-            continue
         if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, launcher)):
             continue
-        db.add(AppEntry(name=name, slug=slug, folder=folder, launcher=launcher, port=port))
+
+        # el manifiesto queda marcado aunque la app ya existiera, para no
+        # volver a evaluarlo en cada arranque
+        seen.add(file.name)
+        key = _app_key(folder, launcher)
+        if key in registradas:
+            continue
+
+        db.add(
+            AppEntry(
+                name=name,
+                slug=_unique_slug(db, slugify(name)),
+                folder=folder,
+                launcher=launcher,
+                port=port,
+            )
+        )
+        registradas.add(key)
         imported.append(name)
+
     if imported:
         db.commit()
+    if seen != already:
+        set_setting(db, IMPORTED_KEY, json.dumps(sorted(seen)))
     return imported
