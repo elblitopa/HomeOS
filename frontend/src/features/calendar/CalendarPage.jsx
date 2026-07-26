@@ -7,7 +7,8 @@ import useContexts from "../../hooks/useContexts.js";
 import { formatDateTime } from "../../lib/constants.js";
 import EventFormModal from "./EventFormModal.jsx";
 
-const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const WEEKDAYS_LUN = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const WEEKDAYS_DOM = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
@@ -40,6 +41,13 @@ export default function CalendarPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [prefillDate, setPrefillDate] = useState(null);
+  const [weekStart, setWeekStart] = useState("monday");
+
+  useEffect(() => {
+    apiGet("/api/settings")
+      .then((s) => setWeekStart(s.week_starts_on || "monday"))
+      .catch(() => {});
+  }, []);
 
   const kindsParam = [...active].join(",");
 
@@ -66,16 +74,20 @@ export default function CalendarPage() {
     return map;
   }, [visibles]);
 
+  const domingoPrimero = weekStart === "sunday";
+  const weekdays = domingoPrimero ? WEEKDAYS_DOM : WEEKDAYS_LUN;
+
   const cells = useMemo(() => {
     const first = new Date(year, month, 1);
-    const startOffset = (first.getDay() + 6) % 7; // lunes = 0
+    // getDay(): 0 = domingo. Con semana en lunes hay que recorrer un lugar.
+    const startOffset = domingoPrimero ? first.getDay() : (first.getDay() + 6) % 7;
     const gridStart = new Date(year, month, 1 - startOffset);
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(gridStart);
       d.setDate(gridStart.getDate() + i);
       return d;
     });
-  }, [year, month]);
+  }, [year, month, domingoPrimero]);
 
   const upcoming = useMemo(
     () => visibles.filter((i) => new Date(i.date) >= new Date(Date.now() - 3600e3)).slice(0, 10),
@@ -199,7 +211,7 @@ export default function CalendarPage() {
 
       <GlassCard className="p-4">
         <div className="grid grid-cols-7 gap-1">
-          {WEEKDAYS.map((d) => (
+          {weekdays.map((d) => (
             <div key={d} className="pb-2 text-center text-xs font-semibold text-ink-soft">
               {d}
             </div>

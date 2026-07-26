@@ -17,11 +17,26 @@ export default function SettingsPage() {
   const [newColor, setNewColor] = useState(CONTEXT_COLORS[0]);
   const [ctxError, setCtxError] = useState(null);
 
+  const [weekStart, setWeekStart] = useState("monday");
+
   useEffect(() => {
     apiGet("/api/settings")
-      .then((s) => setWebhook(s.discord_webhook_url || ""))
+      .then((s) => {
+        setWebhook(s.discord_webhook_url || "");
+        setWeekStart(s.week_starts_on || "monday");
+      })
       .catch(() => {});
   }, []);
+
+  const cambiarInicioSemana = async (value) => {
+    const previo = weekStart;
+    setWeekStart(value); // respuesta inmediata; si falla se revierte
+    try {
+      await apiPut("/api/settings", { week_starts_on: value });
+    } catch {
+      setWeekStart(previo);
+    }
+  };
 
   const saveWebhook = async () => {
     setBusy(true);
@@ -102,6 +117,29 @@ export default function SettingsPage() {
               {webhookMsg.text}
             </p>
           )}
+        </GlassCard>
+
+        <GlassCard className="p-5">
+          <h2 className="mb-1 font-semibold">Calendario</h2>
+          <p className="mb-3 text-sm text-ink-soft">
+            Con qué día quieres que empiece la semana. Aplica en todos tus dispositivos.
+          </p>
+          <div className="flex gap-1 rounded-xl bg-ink/5 p-1 sm:w-fit">
+            {[
+              { value: "monday", label: "Lunes" },
+              { value: "sunday", label: "Domingo" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => cambiarInicioSemana(opt.value)}
+                className={`flex-1 rounded-lg px-6 py-1.5 text-sm font-medium transition ${
+                  weekStart === opt.value ? "bg-surface shadow-sm" : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </GlassCard>
 
         <GlassCard className="p-5">
