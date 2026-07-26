@@ -98,13 +98,47 @@ export const CURRENCIES = [
 export const kindOf = (value) =>
   ACCOUNT_KINDS.find((k) => k.value === value) || ACCOUNT_KINDS[4];
 
+// Criptos (código -> id de CoinGecko)
+export const CRYPTOS = [
+  { code: "BTC", id: "bitcoin", name: "Bitcoin" },
+  { code: "ETH", id: "ethereum", name: "Ethereum" },
+  { code: "USDT", id: "tether", name: "Tether" },
+  { code: "USDC", id: "usd-coin", name: "USD Coin" },
+  { code: "BNB", id: "binancecoin", name: "BNB" },
+  { code: "SOL", id: "solana", name: "Solana" },
+  { code: "XRP", id: "ripple", name: "XRP" },
+  { code: "ADA", id: "cardano", name: "Cardano" },
+  { code: "DOGE", id: "dogecoin", name: "Dogecoin" },
+  { code: "AVAX", id: "avalanche-2", name: "Avalanche" },
+  { code: "DOT", id: "polkadot", name: "Polkadot" },
+  { code: "LINK", id: "chainlink", name: "Chainlink" },
+  { code: "LTC", id: "litecoin", name: "Litecoin" },
+  { code: "TRX", id: "tron", name: "TRON" },
+  { code: "SHIB", id: "shiba-inu", name: "Shiba Inu" },
+];
+
 export function fmtMoney(amount, currency = "MXN") {
+  try {
+    return new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount ?? 0);
+  } catch {
+    // códigos que no son ISO (cripto): Intl los rechaza, formato manual
+    return `${fmtRate(amount)} ${currency}`;
+  }
+}
+
+/** Precios que van de millones (BTC) a fracciones de centavo (SHIB). */
+export function fmtRate(value) {
+  const n = Number(value ?? 0);
+  const decimals = Math.abs(n) >= 1000 ? 2 : Math.abs(n) >= 1 ? 4 : 8;
   return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency,
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount ?? 0);
+    maximumFractionDigits: decimals,
+  }).format(n);
 }
 
 export function monthLabel(key) {

@@ -8,6 +8,7 @@ const NAV = [
   { to: "/calendario", label: "Calendario", icon: "📅", enabled: true },
   { to: "/tareas", label: "Tareas", icon: "✅", enabled: true },
   { to: "/finanzas", label: "Finanzas & Negocios", icon: "💼", enabled: true },
+  { to: "/divisas", label: "Divisas", icon: "💱", enabled: true },
   { to: "/rutinas", label: "Rutinas", icon: "🔁", enabled: true },
   { to: "/notas", label: "Notas", icon: "📝", enabled: true },
   { to: "/archivos", label: "Archivos", icon: "📁", enabled: true },

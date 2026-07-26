@@ -17,11 +17,14 @@ class ExchangeRate(Base):
 
     __tablename__ = "exchange_rates"
 
-    code: Mapped[str] = mapped_column(String, primary_key=True)  # USD, EUR…
+    code: Mapped[str] = mapped_column(String, primary_key=True)  # USD, EUR, BTC…
     rate_to_mxn: Mapped[float] = mapped_column(Float, default=1.0)
     # manual = el usuario fijo el tipo de cambio; la actualizacion automatica lo respeta
     manual: Mapped[int] = mapped_column(Integer, default=0)
     source: Mapped[str] = mapped_column(String, default="auto")
+    kind: Mapped[str] = mapped_column(String, default="fiat")  # fiat | cripto
+    # id que usa la API de cripto (CoinGecko): BTC -> "bitcoin"
+    api_id: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self) -> dict:
@@ -30,6 +33,8 @@ class ExchangeRate(Base):
             "rate_to_mxn": self.rate_to_mxn,
             "manual": bool(self.manual),
             "source": self.source,
+            "kind": self.kind or "fiat",
+            "api_id": self.api_id,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 

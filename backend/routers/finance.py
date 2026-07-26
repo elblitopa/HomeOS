@@ -477,8 +477,10 @@ def delete_subscription(item_id: int, db: Session = Depends(get_db)):
 # ---------- divisas ----------
 
 class RateCreate(BaseModel):
-    code: str = Field(min_length=3, max_length=3)
+    code: str = Field(min_length=2, max_length=10)
     rate_to_mxn: float | None = Field(default=None, gt=0)
+    kind: str = "fiat"  # fiat | cripto
+    api_id: str | None = None  # id de CoinGecko para cripto
 
 
 class RateUpdate(BaseModel):
@@ -498,22 +500,28 @@ def add_rate(payload: RateCreate, db: Session = Depends(get_db)):
     code = payload.code.upper()
     if db.get(ExchangeRate, code):
         raise HTTPException(409, f"{code} ya está en la lista")
+    kind = "cripto" if payload.kind == "cripto" else "fiat"
+    api_id = (payload.api_id or "").strip().lower() or None
     manual = payload.rate_to_mxn is not None
     rate = payload.rate_to_mxn
     if not manual:
         # intentar traerlo de la API al momento de agregarlo
-        table = fx.fetch_rates_to_mxn()
-        rate = table.get(code)
+        if kind == "cripto":
+            rate = fx.fetch_crypto_to_mxn({code: api_id or code.lower()}).get(code)
+        else:
+            rate = fx.fetch_rates_to_mxn().get(code)
         if not rate:
             raise HTTPException(
                 400,
-                f"No se encontró el tipo de cambio de {code}. Captúralo manualmente.",
+                f"No se encontró el precio de {code}. Captúralo manualmente.",
             )
     row = ExchangeRate(
         code=code,
-        rate_to_mxn=round(rate, 6),
+        rate_to_mxn=round(rate, 2 if rate > 1000 else 10),
         manual=1 if manual else 0,
         source="manual" if manual else "auto",
+        kind=kind,
+        api_id=api_id,
     )
     db.add(row)
     db.commit()
@@ -528,7 +536,8 @@ def update_rate(code: str, payload: RateUpdate, db: Session = Depends(get_db)):
     if row.code == BASE_CURRENCY:
         raise HTTPException(400, f"{BASE_CURRENCY} es la divisa base y siempre vale 1")
     if payload.rate_to_mxn is not None:
-        row.rate_to_mxn = round(payload.rate_to_mxn, 6)
+        value = payload.rate_to_mxn
+        row.rate_to_mxn = round(value, 2 if value > 1000 else 10)
         row.updated_at = datetime.now()
     row.manual = 1 if payload.manual else 0
     row.source = "manual" if payload.manual else "auto"

@@ -6,7 +6,6 @@ import ResumenTab from "./ResumenTab.jsx";
 import TransactionsTab from "./TransactionsTab.jsx";
 import CategoriesTab from "./CategoriesTab.jsx";
 import MonthlyTab from "./MonthlyTab.jsx";
-import DivisasTab from "./DivisasTab.jsx";
 import ProvidersTab from "./ProvidersTab.jsx";
 import BusinessTab from "./BusinessTab.jsx";
 
@@ -15,7 +14,6 @@ const TABS = [
   { key: "transacciones", label: "Transacciones" },
   { key: "categorias", label: "Categorías" },
   { key: "mensual", label: "Mensual" },
-  { key: "divisas", label: "Divisas" },
   { key: "proveedores", label: "Proveedores" },
   { key: "negocios", label: "Negocios" },
 ];
@@ -60,7 +58,6 @@ export default function FinancePage() {
       {tab === "transacciones" && <TransactionsTab {...shared} />}
       {tab === "categorias" && <CategoriesTab {...shared} />}
       {tab === "mensual" && <MonthlyTab {...shared} />}
-      {tab === "divisas" && <DivisasTab {...shared} />}
       {tab === "proveedores" && <ProvidersTab {...shared} />}
       {tab === "negocios" && <BusinessTab {...shared} />}
     </div>

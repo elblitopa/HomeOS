@@ -40,6 +40,8 @@ def get_db():
 MIGRATIONS = [
     ("transactions", "fx_rate", "fx_rate FLOAT"),
     ("accounts", "banner_path", "banner_path VARCHAR"),
+    ("exchange_rates", "kind", "kind VARCHAR DEFAULT 'fiat'"),
+    ("exchange_rates", "api_id", "api_id VARCHAR"),
 ]
 
 
