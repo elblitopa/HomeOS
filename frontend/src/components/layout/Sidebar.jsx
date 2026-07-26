@@ -115,13 +115,35 @@ function MobileNav() {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed = false, onToggle }) {
   return (
     <>
-      <aside className="glass m-4 mr-0 flex w-60 shrink-0 flex-col p-4 max-md:hidden">
+      {/* con el panel oculto queda este boton flotante para volver a abrirlo */}
+      {collapsed && (
+        <button
+          onClick={onToggle}
+          className="glass fixed left-3 top-3 z-40 px-2.5 py-2 text-sm transition hover:bg-surface/80 max-md:hidden"
+          title="Mostrar menú"
+        >
+          ☰
+        </button>
+      )}
+
+      <aside
+        className={`glass m-4 mr-0 w-60 shrink-0 flex-col p-4 max-md:hidden ${
+          collapsed ? "hidden" : "flex"
+        }`}
+      >
         <div className="mb-6 flex items-center gap-2 px-2">
           <span className="text-2xl">🏠</span>
-          <span className="text-lg font-semibold tracking-tight">HomeOS</span>
+          <span className="flex-1 text-lg font-semibold tracking-tight">HomeOS</span>
+          <button
+            onClick={onToggle}
+            className="rounded-lg px-1.5 py-0.5 text-sm text-ink-soft transition hover:bg-ink/5"
+            title="Ocultar menú"
+          >
+            «
+          </button>
         </div>
 
         <nav className="flex flex-col gap-1">

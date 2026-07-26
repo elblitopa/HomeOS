@@ -39,6 +39,7 @@ def get_db():
 # tablas nuevas, no columnas nuevas, asi que estas se agregan a mano.
 MIGRATIONS = [
     ("transactions", "fx_rate", "fx_rate FLOAT"),
+    ("accounts", "banner_path", "banner_path VARCHAR"),
 ]
 
 

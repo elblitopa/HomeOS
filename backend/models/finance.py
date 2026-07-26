@@ -47,6 +47,7 @@ class Account(Base):
     currency: Mapped[str] = mapped_column(String, default="MXN")
     initial_balance: Mapped[float] = mapped_column(Float, default=0.0)
     color: Mapped[str] = mapped_column(String, default="#2383e2")
+    banner_path: Mapped[str | None] = mapped_column(String, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -60,6 +61,7 @@ class Account(Base):
             "currency": self.currency,
             "initial_balance": self.initial_balance,
             "color": self.color,
+            "banner_path": self.banner_path,
             "sort_order": self.sort_order,
         }
 

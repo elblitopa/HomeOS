@@ -61,7 +61,22 @@ export function AccountModal({ open, account, onClose, onSaved }) {
     currency: account?.currency || "MXN",
     initial_balance: account?.initial_balance ?? 0,
     color: account?.color || CONTEXT_COLORS[0],
+    banner_path: account?.banner_path || null,
   });
+
+  const uploadBanner = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    try {
+      const up = await apiUpload("/api/uploads/banner", file);
+      setForm((f) => ({ ...f, banner_path: up.path }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      e.target.value = "";
+    }
+  };
 
   const save = async () => {
     if (!form.name.trim()) return setError("Ponle nombre a la cuenta.");
@@ -150,6 +165,30 @@ export function AccountModal({ open, account, onClose, onSaved }) {
             </div>
           </div>
         </div>
+        <div className="flex flex-col gap-1.5 text-sm font-medium">
+          Banner (opcional)
+          {form.banner_path ? (
+            <div className="flex items-center gap-2">
+              <div
+                className="h-14 flex-1 rounded-xl bg-cover bg-center"
+                style={{ backgroundImage: `url(${form.banner_path})` }}
+              />
+              <button
+                className="text-err"
+                onClick={() => setForm((f) => ({ ...f, banner_path: null }))}
+                title="Quitar banner"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <input type="file" accept="image/*" className="text-xs" onChange={uploadBanner} />
+          )}
+          <span className="text-[11px] font-normal text-ink-soft">
+            Ideal 1200 × 400 px. Se recorta al centro para llenar la tarjeta.
+          </span>
+        </div>
+
         {error && <p className="text-sm text-err">{error}</p>}
         <Footer onDelete={account ? remove : null} onClose={onClose} onSave={save} saving={saving} />
       </div>

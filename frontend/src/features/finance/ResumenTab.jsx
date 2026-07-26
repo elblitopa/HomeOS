@@ -123,9 +123,10 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                     {accs.map((a) => (
                       <GlassCard
                         key={a.id}
-                        className="cursor-pointer p-4 transition hover:bg-surface/75"
+                        banner={a.banner_path}
+                        className="cursor-pointer transition hover:bg-surface/75"
                       >
-                        <div onClick={() => setModal({ type: "account", data: a })}>
+                        <div className="p-4" onClick={() => setModal({ type: "account", data: a })}>
                           <div className="mb-2 flex items-center justify-between">
                             <span className="flex items-center gap-2 font-medium">
                               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: a.color }} />

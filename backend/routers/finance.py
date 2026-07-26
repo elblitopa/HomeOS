@@ -95,6 +95,7 @@ class AccountPayload(BaseModel):
     currency: str = "MXN"
     initial_balance: float = 0.0
     color: str = "#2383e2"
+    banner_path: str | None = None
     sort_order: int = 0
 
 
