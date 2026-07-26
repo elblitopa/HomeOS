@@ -20,12 +20,16 @@ export default function EventFormModal({
   event,
   prefillDate,
   contexts,
+  googleReady = false,
   onClose,
   onSaved,
 }) {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  // los eventos de Google se editan contra Google, no contra la base local
+  const esGoogle = form.source === "google";
 
   useEffect(() => {
     if (open) {
@@ -38,10 +42,12 @@ export default function EventFormModal({
           end: toInputValue(event.end),
           all_day: event.all_day,
           reminders: event.reminders || [],
+          source: event.source || "homeos",
         });
       } else {
         setForm({
           ...EMPTY,
+          source: "homeos",
           // desde la vista diaria llega con hora; desde el mes solo la fecha
           start: prefillDate ? (prefillDate.includes("T") ? prefillDate : `${prefillDate}T09:00`) : "",
         });
@@ -60,17 +66,25 @@ export default function EventFormModal({
     setSaving(true);
     setError(null);
     try {
-      const payload = {
+      const base = {
         title: form.title.trim(),
         description: form.description.trim() || null,
-        context_id: form.context_id ? Number(form.context_id) : null,
         start: form.all_day ? `${form.start.slice(0, 10)}T00:00` : form.start,
         end: form.end || null,
         all_day: form.all_day,
-        reminders: form.reminders,
       };
-      if (event) await apiPut(`/api/events/${event.id}`, payload);
-      else await apiPost("/api/events", payload);
+      if (esGoogle) {
+        if (event) await apiPut(`/api/google/events/${event.id}`, base);
+        else await apiPost("/api/google/events", base);
+      } else {
+        const payload = {
+          ...base,
+          context_id: form.context_id ? Number(form.context_id) : null,
+          reminders: form.reminders,
+        };
+        if (event) await apiPut(`/api/events/${event.id}`, payload);
+        else await apiPost("/api/events", payload);
+      }
       onSaved();
     } catch (e) {
       setError(e.message);
@@ -80,9 +94,10 @@ export default function EventFormModal({
   };
 
   const remove = async () => {
-    if (!confirm(`¿Eliminar el evento "${event.title}"?`)) return;
+    const donde = esGoogle ? " de Google Calendar" : "";
+    if (!confirm(`¿Eliminar el evento "${event.title}"${donde}?`)) return;
     try {
-      await apiDelete(`/api/events/${event.id}`);
+      await apiDelete(esGoogle ? `/api/google/events/${event.id}` : `/api/events/${event.id}`);
       onSaved();
     } catch (e) {
       setError(e.message);
@@ -102,6 +117,27 @@ export default function EventFormModal({
             autoFocus
           />
         </label>
+
+        {/* al crear se elige donde guardarlo; al editar solo se informa */}
+        {googleReady && (
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Guardar en
+            {event ? (
+              <p className="text-sm font-normal text-ink-soft">
+                {esGoogle ? "📆 Google Calendar" : "🏠 HomeOS"}
+              </p>
+            ) : (
+              <select
+                className={inputCls}
+                value={form.source}
+                onChange={set("source")}
+              >
+                <option value="homeos">🏠 HomeOS</option>
+                <option value="google">📆 Google Calendar</option>
+              </select>
+            )}
+          </label>
+        )}
 
         <label className="flex items-center gap-2 text-sm font-medium">
           <input
@@ -140,25 +176,30 @@ export default function EventFormModal({
           </label>
         </div>
 
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          Contexto
-          <select className={inputCls} value={form.context_id} onChange={set("context_id")}>
-            <option value="">General</option>
-            {contexts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* contexto y avisos son de HomeOS; Google no los guarda */}
+        {!esGoogle && (
+          <>
+            <label className="flex flex-col gap-1 text-sm font-medium">
+              Contexto
+              <select className={inputCls} value={form.context_id} onChange={set("context_id")}>
+                <option value="">General</option>
+                {contexts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <div className="flex flex-col gap-1.5 text-sm font-medium">
-          Avisos por Discord
-          <ReminderPicker
-            value={form.reminders}
-            onChange={(r) => setForm((f) => ({ ...f, reminders: r }))}
-          />
-        </div>
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              Avisos por Discord
+              <ReminderPicker
+                value={form.reminders}
+                onChange={(r) => setForm((f) => ({ ...f, reminders: r }))}
+              />
+            </div>
+          </>
+        )}
 
         <label className="flex flex-col gap-1 text-sm font-medium">
           Descripción

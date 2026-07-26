@@ -22,11 +22,14 @@ from backend.models import (
     Todo,
     Transaction,
 )
+from backend.services import google_calendar as gcal
 from backend.services.dates import occurrences
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
-KINDS = ["evento", "tarea", "suscripcion", "pago", "meta", "nota", "transaccion"]
+KINDS = [
+    "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota", "transaccion",
+]
 
 
 def _money(amount: float, currency: str = BASE_CURRENCY) -> str:
@@ -60,6 +63,16 @@ def agenda(
         for e in db.query(Event).filter(Event.start >= desde, Event.start < hasta):
             add("evento", e.id, e.title, e.start, e.description, e.context_id,
                 {"all_day": e.all_day, "end": e.end.isoformat() if e.end else None})
+
+    if "google" in wanted and gcal.is_connected(db):
+        try:
+            for e in gcal.list_events(db, desde, hasta):
+                add("google", e["id"], e["title"], e["start"], e["description"], None,
+                    {"all_day": e["all_day"],
+                     "end": e["end"].isoformat() if e["end"] else None,
+                     "link": e["link"]})
+        except gcal.GoogleError:
+            pass  # si Google falla, el resto del calendario debe seguir funcionando
 
     if "tarea" in wanted:
         q = db.query(Todo).filter(

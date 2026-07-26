@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet } from "../../api/client.js";
+import { apiGet, apiPut } from "../../api/client.js";
 import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
+import Modal from "../../components/ui/Modal.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import { formatDateTime } from "../../lib/constants.js";
 import DayView from "./DayView.jsx";
@@ -19,6 +20,7 @@ const MONTHS = [
 // asi que empiezan apagadas para no saturar la vista.
 const KINDS = [
   { key: "evento", label: "Eventos", icon: "📅", color: "#2383e2", on: true },
+  { key: "google", label: "Google", icon: "📆", color: "#ea4335", on: true },
   { key: "tarea", label: "Tareas", icon: "✅", color: "#0ca678", on: true },
   { key: "suscripcion", label: "Suscripciones", icon: "🔁", color: "#9c36b5", on: true },
   { key: "pago", label: "Pagos", icon: "📆", color: "#e8590c", on: true },
@@ -28,6 +30,7 @@ const KINDS = [
 ];
 
 const KIND = Object.fromEntries(KINDS.map((k) => [k.key, k]));
+const COLORES_BASE = Object.fromEntries(KINDS.map((k) => [k.key, k.color]));
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -45,12 +48,30 @@ export default function CalendarPage() {
   const [editing, setEditing] = useState(null);
   const [prefillDate, setPrefillDate] = useState(null);
   const [weekStart, setWeekStart] = useState("monday");
+  const [colors, setColors] = useState(COLORES_BASE);
+  const [coloresAbiertos, setColoresAbiertos] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
 
   useEffect(() => {
     apiGet("/api/settings")
-      .then((s) => setWeekStart(s.week_starts_on || "monday"))
+      .then((s) => {
+        setWeekStart(s.week_starts_on || "monday");
+        if (s.calendar_colors) setColors({ ...COLORES_BASE, ...s.calendar_colors });
+      })
+      .catch(() => {});
+    apiGet("/api/google/status")
+      .then((s) => setGoogleReady(!!s.connected))
       .catch(() => {});
   }, []);
+
+  const guardarColores = async (nuevos) => {
+    setColors(nuevos);
+    try {
+      await apiPut("/api/settings", { calendar_colors: nuevos });
+    } catch {
+      /* si falla, al recargar vuelven los guardados */
+    }
+  };
 
   const kindsParam = [...active].join(",");
 
@@ -154,14 +175,28 @@ export default function CalendarPage() {
   };
 
   const abrir = (item) => {
-    // solo los eventos se editan desde aqui; lo demas vive en su propia sección
+    // los eventos de Google se editan contra Google; el resto vive en su sección
+    if (item.kind === "google") {
+      setEditing({
+        id: item.ref_id,
+        title: item.title,
+        description: item.detail || "",
+        start: item.date,
+        end: item.end,
+        all_day: item.all_day,
+        source: "google",
+      });
+      setPrefillDate(null);
+      setModalOpen(true);
+      return;
+    }
     if (item.kind !== "evento") return;
     const fecha = item.date.slice(0, 10);
     apiGet(`/api/events?from=${fecha}&to=${fecha}T23:59`)
       .then((list) => {
         const found = list.find((e) => e.id === item.ref_id);
         if (found) {
-          setEditing(found);
+          setEditing({ ...found, source: "homeos" });
           setPrefillDate(null);
           setModalOpen(true);
         }
@@ -169,8 +204,8 @@ export default function CalendarPage() {
       .catch(() => {});
   };
 
-  const colorDe = (item) =>
-    (item.context_id && byId[item.context_id]?.color) || KIND[item.kind]?.color || "#2383e2";
+  // el color lo manda el tipo, para que coincida con los chips de arriba
+  const colorDe = (item) => colors[item.kind] || COLORES_BASE[item.kind] || "#2383e2";
 
   const todayKey = dayKey(today);
   const enDia = view === "dia";
@@ -243,8 +278,8 @@ export default function CalendarPage() {
       </div>
 
       {/* que tipos de cosas se ven */}
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {KINDS.map((k) => {
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        {KINDS.filter((k) => k.key !== "google" || googleReady).map((k) => {
           const on = active.has(k.key);
           return (
             <button
@@ -253,13 +288,20 @@ export default function CalendarPage() {
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                 on ? "border-transparent text-white" : "border-glass-border text-ink-soft"
               }`}
-              style={on ? { backgroundColor: k.color } : {}}
+              style={on ? { backgroundColor: colors[k.key] } : {}}
               title={on ? `Ocultar ${k.label.toLowerCase()}` : `Mostrar ${k.label.toLowerCase()}`}
             >
               {k.icon} {k.label}
             </button>
           );
         })}
+        <button
+          onClick={() => setColoresAbiertos(true)}
+          className="rounded-full border border-glass-border px-2.5 py-1 text-xs text-ink-soft transition hover:text-ink"
+          title="Colores del calendario"
+        >
+          ⚙️
+        </button>
       </div>
 
       {enDia ? (
@@ -380,12 +422,45 @@ export default function CalendarPage() {
         event={editing}
         prefillDate={prefillDate}
         contexts={contexts}
+        googleReady={googleReady}
         onClose={() => setModalOpen(false)}
         onSaved={() => {
           setModalOpen(false);
           refresh();
         }}
       />
+
+      <Modal
+        open={coloresAbiertos}
+        onClose={() => setColoresAbiertos(false)}
+        title="Colores del calendario"
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink-soft">
+            El color de cada tipo aplica a sus bloques en el mes y en el día.
+          </p>
+          {KINDS.map((k) => (
+            <label key={k.key} className="flex items-center gap-3 text-sm font-medium">
+              <input
+                type="color"
+                value={colors[k.key] || COLORES_BASE[k.key]}
+                onChange={(e) => guardarColores({ ...colors, [k.key]: e.target.value })}
+                className="h-9 w-14 cursor-pointer rounded-lg border border-glass-border bg-transparent"
+              />
+              <span className="flex-1">
+                {k.icon} {k.label}
+              </span>
+              <span className="text-xs text-ink-soft">{colors[k.key]}</span>
+            </label>
+          ))}
+          <div className="flex justify-between gap-2 pt-1">
+            <Button variant="ghost" onClick={() => guardarColores(COLORES_BASE)}>
+              Restaurar
+            </Button>
+            <Button onClick={() => setColoresAbiertos(false)}>Listo</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
