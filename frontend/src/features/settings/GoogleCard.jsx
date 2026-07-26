@@ -11,6 +11,7 @@ export default function GoogleCard() {
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [guia, setGuia] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   const cargar = useCallback(() => {
     apiGet("/api/google/status")
@@ -135,10 +136,23 @@ export default function GoogleCard() {
                 <b>Aplicación web</b>.
               </li>
               <li>
-                En <b>URI de redireccionamiento autorizados</b> pega exactamente:
-                <code className="mt-1 block rounded bg-ink/5 p-1.5 text-[11px]">
-                  {status.redirect_uri}
-                </code>
+                En <b>URI de redireccionamiento autorizados</b> (no en “Orígenes
+                autorizados de JavaScript”) pega exactamente:
+                <span className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 rounded bg-ink/5 p-1.5 text-[11px]">
+                    {status.redirect_uri}
+                  </code>
+                  <button
+                    className="shrink-0 rounded-lg border border-glass-border px-2 py-1 text-[11px] transition hover:border-accent hover:text-accent"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(status.redirect_uri);
+                      setCopiado(true);
+                      setTimeout(() => setCopiado(false), 1500);
+                    }}
+                  >
+                    {copiado ? "✓ Copiado" : "Copiar"}
+                  </button>
+                </span>
               </li>
               <li>Copia el Client ID y el Client Secret aquí abajo.</li>
             </ol>
