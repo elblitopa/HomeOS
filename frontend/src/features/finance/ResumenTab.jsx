@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api/client.js";
+import useCardSort from "../../hooks/useCardSort.js";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { BASE_CURRENCY, fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
@@ -56,9 +57,32 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
     reload();
   };
 
+  // orden de las tarjetas: viene del servidor y se puede reacomodar arrastrando
+  const [order, setOrder] = useState([]);
+
+  useEffect(() => {
+    const ids = accounts.map((a) => a.id);
+    setOrder((prev) => {
+      const kept = prev.filter((id) => ids.includes(id));
+      const added = ids.filter((id) => !kept.includes(id));
+      return [...kept, ...added];
+    });
+  }, [accounts]);
+
+  const ordered = useMemo(() => {
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    return order.map((id) => byId.get(id)).filter(Boolean);
+  }, [accounts, order]);
+
+  const { draggingId, handleProps } = useCardSort({
+    order,
+    onReorder: setOrder,
+    onCommit: (ids) => apiPost("/api/finance/accounts/reorder", { ids }).catch(() => {}),
+  });
+
   // agrupar cuentas por tipo
   const groups = {};
-  for (const a of accounts) (groups[a.kind] ||= []).push(a);
+  for (const a of ordered) (groups[a.kind] ||= []).push(a);
 
   const totalMxn = accounts.reduce((sum, a) => sum + (a.balance_mxn ?? a.balance ?? 0), 0);
   const hasForeign = accounts.some((a) => a.currency !== BASE_CURRENCY);
@@ -124,8 +148,21 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                       <GlassCard
                         key={a.id}
                         banner={a.banner_path}
-                        className="cursor-pointer transition hover:bg-surface/75"
+                        data-sort-id={a.id}
+                        data-sort-group={kind}
+                        className={`relative cursor-pointer transition hover:bg-surface/75 ${
+                          draggingId === String(a.id)
+                            ? "scale-[0.98] opacity-60 ring-2 ring-accent"
+                            : ""
+                        }`}
                       >
+                        <button
+                          {...handleProps(a.id, kind)}
+                          className="absolute right-1.5 top-1.5 z-10 rounded-lg bg-surface/70 px-1.5 py-0.5 text-xs text-ink-soft backdrop-blur transition hover:text-ink"
+                          title="Arrastra para acomodar"
+                        >
+                          ⠿
+                        </button>
                         <div className="p-4" onClick={() => setModal({ type: "account", data: a })}>
                           <div className="mb-2 flex items-center justify-between">
                             <span className="flex items-center gap-2 font-medium">

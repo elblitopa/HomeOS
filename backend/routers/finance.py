@@ -127,6 +127,22 @@ def create_account(payload: AccountPayload, db: Session = Depends(get_db)):
     return acc.to_dict()
 
 
+class ReorderPayload(BaseModel):
+    ids: list[int]
+
+
+@router.post("/accounts/reorder")
+def reorder_accounts(payload: ReorderPayload, db: Session = Depends(get_db)):
+    """Guarda el acomodo de las tarjetas (drag & drop)."""
+    accounts = {a.id: a for a in db.query(Account).all()}
+    for index, acc_id in enumerate(payload.ids):
+        account = accounts.get(acc_id)
+        if account:
+            account.sort_order = index
+    db.commit()
+    return {"ordered": len(payload.ids)}
+
+
 @router.put("/accounts/{acc_id}")
 def update_account(acc_id: int, payload: AccountPayload, db: Session = Depends(get_db)):
     acc = db.get(Account, acc_id)

@@ -1,6 +1,6 @@
-export default function GlassCard({ banner, className = "", children }) {
+export default function GlassCard({ banner, className = "", children, ...rest }) {
   return (
-    <div className={`glass overflow-hidden ${className}`}>
+    <div className={`glass overflow-hidden ${className}`} {...rest}>
       {banner && (
         <div
           className="h-24 w-full bg-cover bg-center"
