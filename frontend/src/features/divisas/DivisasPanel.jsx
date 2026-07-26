@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client.js";
-import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import {
-  BASE_CURRENCY,
-  CRYPTOS,
-  CURRENCIES,
-  fmtRate,
-  formatDateTime,
-} from "../../lib/constants.js";
+import { BASE_CURRENCY, CRYPTOS, CURRENCIES, fmtRate, formatDateTime } from "../../lib/constants.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
 import ConverterCard from "./ConverterCard.jsx";
 
@@ -106,9 +99,8 @@ function RateCard({ rate, accounts, onEdit, onAuto, onRemove, editing, setEditin
   );
 }
 
-export default function DivisasPage() {
+export default function DivisasPanel({ accounts = [], reload, version }) {
   const [rates, setRates] = useState([]);
-  const [accounts, setAccounts] = useState([]);
   const [newFiat, setNewFiat] = useState("USD");
   const [newCrypto, setNewCrypto] = useState("BTC");
   const [busy, setBusy] = useState(false);
@@ -117,10 +109,9 @@ export default function DivisasPage() {
 
   const refresh = useCallback(() => {
     apiGet("/api/finance/rates").then(setRates).catch(() => {});
-    apiGet("/api/finance/accounts").then(setAccounts).catch(() => {});
   }, []);
 
-  useEffect(refresh, [refresh]);
+  useEffect(refresh, [refresh, version]);
 
   const have = new Set(rates.map((r) => r.code));
   const fiat = rates.filter((r) => r.kind !== "cripto");
@@ -134,6 +125,7 @@ export default function DivisasPage() {
     try {
       await fn();
       refresh();
+      reload?.();
     } catch (e) {
       setMsg({ ok: false, text: e.message });
     } finally {
@@ -147,11 +139,7 @@ export default function DivisasPage() {
   const addCrypto = () => {
     const meta = CRYPTOS.find((c) => c.code === newCrypto);
     return run(() =>
-      apiPost("/api/finance/rates", {
-        code: meta.code,
-        kind: "cripto",
-        api_id: meta.id,
-      })
+      apiPost("/api/finance/rates", { code: meta.code, kind: "cripto", api_id: meta.id })
     );
   };
 
@@ -166,6 +154,7 @@ export default function DivisasPage() {
           ? { ok: true, text: `Actualizados ${res.updated} precio(s).` }
           : { ok: false, text: `Sin cambios: ${res.skipped || "nada que actualizar"}.` }
       );
+      reload?.();
     } catch (e) {
       setMsg({ ok: false, text: e.message });
     } finally {
@@ -202,86 +191,82 @@ export default function DivisasPage() {
   };
 
   return (
-    <div className="p-4 md:p-8">
-      <TopBar
-        title="Divisas"
-        subtitle={`${fiat.length} moneda(s) y ${crypto.length} cripto`}
-      >
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-ink-soft">
+          {fiat.length} moneda(s) y {crypto.length} cripto
+        </p>
         <Button variant="ghost" onClick={refreshNow} disabled={busy}>
           {busy ? "…" : "🔄 Actualizar precios"}
         </Button>
-      </TopBar>
+      </div>
 
-      <div className="flex flex-col gap-6">
-        <ConverterCard rates={rates} />
+      <ConverterCard rates={rates} />
 
-        {msg && (
-          <p className={`text-sm ${msg.ok ? "text-ok" : "text-err"}`}>{msg.text}</p>
-        )}
+      {msg && <p className={`text-sm ${msg.ok ? "text-ok" : "text-err"}`}>{msg.text}</p>}
 
-        <section>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold text-ink-soft">Monedas</h2>
-            <select
-              className={`${inputCls} !w-28`}
-              value={newFiat}
-              onChange={(e) => setNewFiat(e.target.value)}
-            >
-              {availableFiat.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <Button onClick={addFiat} disabled={busy || !availableFiat.length}>
-              ＋ Agregar
-            </Button>
-          </div>
+      <section>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-ink-soft">Monedas</h2>
+          <select
+            className={`${inputCls} !w-28`}
+            value={newFiat}
+            onChange={(e) => setNewFiat(e.target.value)}
+          >
+            {availableFiat.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <Button onClick={addFiat} disabled={busy || !availableFiat.length}>
+            ＋ Agregar
+          </Button>
+        </div>
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
+          {fiat.map((r) => (
+            <RateCard key={r.code} rate={r} {...cardProps} />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-ink-soft">Criptomonedas</h2>
+          <select
+            className={`${inputCls} !w-44`}
+            value={newCrypto}
+            onChange={(e) => setNewCrypto(e.target.value)}
+          >
+            {availableCrypto.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} · {c.name}
+              </option>
+            ))}
+          </select>
+          <Button onClick={addCrypto} disabled={busy || !availableCrypto.length}>
+            ＋ Agregar
+          </Button>
+        </div>
+        {crypto.length === 0 ? (
+          <GlassCard className="p-6 text-center text-sm text-ink-soft">
+            Agrega Bitcoin, Ethereum o cualquier cripto para ver su precio en pesos y
+            usarla en la calculadora.
+          </GlassCard>
+        ) : (
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
-            {fiat.map((r) => (
+            {crypto.map((r) => (
               <RateCard key={r.code} rate={r} {...cardProps} />
             ))}
           </div>
-        </section>
+        )}
+      </section>
 
-        <section>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold text-ink-soft">Criptomonedas</h2>
-            <select
-              className={`${inputCls} !w-44`}
-              value={newCrypto}
-              onChange={(e) => setNewCrypto(e.target.value)}
-            >
-              {availableCrypto.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.code} · {c.name}
-                </option>
-              ))}
-            </select>
-            <Button onClick={addCrypto} disabled={busy || !availableCrypto.length}>
-              ＋ Agregar
-            </Button>
-          </div>
-          {crypto.length === 0 ? (
-            <GlassCard className="p-6 text-center text-sm text-ink-soft">
-              Agrega Bitcoin, Ethereum o cualquier cripto para ver su precio en pesos y
-              usarla en la calculadora.
-            </GlassCard>
-          ) : (
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
-              {crypto.map((r) => (
-                <RateCard key={r.code} rate={r} {...cardProps} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <p className="text-xs text-ink-soft">
-          Los precios se actualizan solos una vez al día. Si tu banco o tu exchange te da
-          otro precio, fíjalo manualmente y HomeOS respetará el tuyo. Las transacciones ya
-          registradas conservan el tipo de cambio del día en que ocurrieron.
-        </p>
-      </div>
+      <p className="text-xs text-ink-soft">
+        Los precios se actualizan solos una vez al día. Si tu banco o tu exchange te da
+        otro precio, fíjalo manualmente y HomeOS respetará el tuyo. Las transacciones ya
+        registradas conservan el tipo de cambio del día en que ocurrieron.
+      </p>
     </div>
   );
 }
