@@ -13,6 +13,19 @@ const MONTHS = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
+// que se muestra en el calendario y como. Las transacciones son muchas,
+// asi que empiezan apagadas para no saturar la vista.
+const KINDS = [
+  { key: "evento", label: "Eventos", icon: "📅", color: "#2383e2", on: true },
+  { key: "tarea", label: "Tareas", icon: "✅", color: "#0ca678", on: true },
+  { key: "suscripcion", label: "Suscripciones", icon: "🔁", color: "#9c36b5", on: true },
+  { key: "pago", label: "Pagos", icon: "📆", color: "#e8590c", on: true },
+  { key: "meta", label: "Metas", icon: "🎯", color: "#f59e0b", on: true },
+  { key: "nota", label: "Notas", icon: "📝", color: "#6b6b70", on: true },
+  { key: "transaccion", label: "Transacciones", icon: "💸", color: "#3b5bdb", on: false },
+];
+
+const KIND = Object.fromEntries(KINDS.map((k) => [k.key, k]));
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -20,37 +33,42 @@ export default function CalendarPage() {
   const { contexts, byId } = useContexts();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-11
+  const [month, setMonth] = useState(today.getMonth());
   const [contextFilter, setContextFilter] = useState(null);
-  const [events, setEvents] = useState([]);
+  const [active, setActive] = useState(() => new Set(KINDS.filter((k) => k.on).map((k) => k.key)));
+  const [items, setItems] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [prefillDate, setPrefillDate] = useState(null);
 
+  const kindsParam = [...active].join(",");
+
   const refresh = useCallback(() => {
-    // rango: mes visible con margen de una semana por lado
+    if (!kindsParam) return setItems([]);
+    // rango: el mes visible con margen de una semana por lado
     const from = new Date(year, month, -7).toISOString().slice(0, 10);
     const to = new Date(year, month + 1, 8).toISOString().slice(0, 10);
-    const params = new URLSearchParams({ from, to });
-    if (contextFilter) params.set("context_id", contextFilter);
-    apiGet(`/api/events?${params}`).then(setEvents).catch(() => {});
-  }, [year, month, contextFilter]);
+    apiGet(`/api/calendar/agenda?from=${from}&to=${to}&kinds=${kindsParam}`)
+      .then(setItems)
+      .catch(() => {});
+  }, [year, month, kindsParam]);
 
   useEffect(refresh, [refresh]);
 
-  const eventsByDay = useMemo(() => {
+  const visibles = useMemo(
+    () => (contextFilter ? items.filter((i) => i.context_id === contextFilter) : items),
+    [items, contextFilter]
+  );
+
+  const porDia = useMemo(() => {
     const map = {};
-    for (const ev of events) {
-      const key = ev.start.slice(0, 10);
-      (map[key] ||= []).push(ev);
-    }
+    for (const item of visibles) (map[item.date.slice(0, 10)] ||= []).push(item);
     return map;
-  }, [events]);
+  }, [visibles]);
 
   const cells = useMemo(() => {
     const first = new Date(year, month, 1);
-    // lunes = 0
-    const startOffset = (first.getDay() + 6) % 7;
+    const startOffset = (first.getDay() + 6) % 7; // lunes = 0
     const gridStart = new Date(year, month, 1 - startOffset);
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(gridStart);
@@ -60,11 +78,14 @@ export default function CalendarPage() {
   }, [year, month]);
 
   const upcoming = useMemo(
-    () =>
-      events
-        .filter((e) => new Date(e.start) >= new Date(Date.now() - 3600e3))
-        .slice(0, 8),
-    [events]
+    () => visibles.filter((i) => new Date(i.date) >= new Date(Date.now() - 3600e3)).slice(0, 10),
+    [visibles]
+  );
+
+  // el rango traido incluye una semana de margen; el conteo es solo del mes
+  const delMes = useMemo(
+    () => visibles.filter((i) => Number(i.date.slice(5, 7)) === month + 1).length,
+    [visibles, month]
   );
 
   const nav = (delta) => {
@@ -73,27 +94,46 @@ export default function CalendarPage() {
     setMonth(d.getMonth());
   };
 
+  const toggleKind = (key) =>
+    setActive((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
   const openNew = (date) => {
     setEditing(null);
     setPrefillDate(date || null);
     setModalOpen(true);
   };
 
-  const openEdit = (ev) => {
-    setEditing(ev);
-    setPrefillDate(null);
-    setModalOpen(true);
+  const abrir = (item) => {
+    // solo los eventos se editan desde aqui; lo demas vive en su propia sección
+    if (item.kind !== "evento") return;
+    apiGet(`/api/events?from=${item.date.slice(0, 10)}&to=${item.date.slice(0, 10)}T23:59`)
+      .then((list) => {
+        const found = list.find((e) => e.id === item.ref_id);
+        if (found) {
+          setEditing(found);
+          setPrefillDate(null);
+          setModalOpen(true);
+        }
+      })
+      .catch(() => {});
   };
+
+  const colorDe = (item) =>
+    (item.context_id && byId[item.context_id]?.color) || KIND[item.kind]?.color || "#2383e2";
 
   const todayKey = dayKey(today);
 
   return (
     <div className="p-4 md:p-8">
-      <TopBar title="Calendario" subtitle={`${events.length} eventos este mes`}>
+      <TopBar title="Calendario" subtitle={`${delMes} en ${MONTHS[month].toLowerCase()}`}>
         <Button onClick={() => openNew()}>＋ Nuevo evento</Button>
       </TopBar>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="glass flex items-center gap-1 px-2 py-1">
           <button className="rounded-lg px-2 py-1 hover:bg-ink/5" onClick={() => nav(-1)}>
             ‹
@@ -137,6 +177,26 @@ export default function CalendarPage() {
         ))}
       </div>
 
+      {/* que tipos de cosas se ven */}
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {KINDS.map((k) => {
+          const on = active.has(k.key);
+          return (
+            <button
+              key={k.key}
+              onClick={() => toggleKind(k.key)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                on ? "border-transparent text-white" : "border-glass-border text-ink-soft"
+              }`}
+              style={on ? { backgroundColor: k.color } : {}}
+              title={on ? `Ocultar ${k.label.toLowerCase()}` : `Mostrar ${k.label.toLowerCase()}`}
+            >
+              {k.icon} {k.label}
+            </button>
+          );
+        })}
+      </div>
+
       <GlassCard className="p-4">
         <div className="grid grid-cols-7 gap-1">
           {WEEKDAYS.map((d) => (
@@ -147,7 +207,7 @@ export default function CalendarPage() {
           {cells.map((date) => {
             const key = dayKey(date);
             const inMonth = date.getMonth() === month;
-            const dayEvents = eventsByDay[key] || [];
+            const delDia = porDia[key] || [];
             return (
               <div
                 key={key}
@@ -164,27 +224,27 @@ export default function CalendarPage() {
                   {date.getDate()}
                 </span>
                 <div className="mt-0.5 flex flex-col gap-0.5">
-                  {dayEvents.slice(0, 3).map((ev) => {
-                    const ctx = ev.context_id ? byId[ev.context_id] : null;
-                    return (
-                      <button
-                        key={ev.id}
-                        className="truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium text-white"
-                        style={{ backgroundColor: ctx?.color || "#2383e2" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(ev);
-                        }}
-                        title={ev.title}
-                      >
-                        {!ev.all_day && `${ev.start.slice(11, 16)} `}
-                        {ev.title}
-                      </button>
-                    );
-                  })}
-                  {dayEvents.length > 3 && (
+                  {delDia.slice(0, 3).map((item, i) => (
+                    <button
+                      key={`${item.kind}-${item.ref_id}-${i}`}
+                      className={`truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium text-white ${
+                        item.done ? "line-through opacity-60" : ""
+                      }`}
+                      style={{ backgroundColor: colorDe(item) }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        abrir(item);
+                      }}
+                      title={`${KIND[item.kind]?.label}: ${item.title}${
+                        item.detail ? ` · ${item.detail}` : ""
+                      }`}
+                    >
+                      {KIND[item.kind]?.icon} {item.title}
+                    </button>
+                  ))}
+                  {delDia.length > 3 && (
                     <span className="px-1 text-[10px] text-ink-soft">
-                      +{dayEvents.length - 3} más
+                      +{delDia.length - 3} más
                     </span>
                   )}
                 </div>
@@ -198,34 +258,38 @@ export default function CalendarPage() {
         <div className="mt-6">
           <h2 className="mb-2 text-sm font-semibold text-ink-soft">Próximos</h2>
           <div className="flex flex-col gap-2">
-            {upcoming.map((ev) => {
-              const ctx = ev.context_id ? byId[ev.context_id] : null;
-              return (
-                <GlassCard
-                  key={ev.id}
-                  className="flex cursor-pointer items-center gap-3 p-3 transition hover:bg-surface/75"
+            {upcoming.map((item, i) => (
+              <GlassCard
+                key={`${item.kind}-${item.ref_id}-${i}`}
+                className="flex items-center gap-3 p-3"
+              >
+                <span
+                  className="h-8 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: colorDe(item) }}
+                />
+                <div
+                  className={`min-w-0 flex-1 ${item.kind === "evento" ? "cursor-pointer" : ""}`}
+                  onClick={() => abrir(item)}
                 >
-                  <span
-                    className="h-8 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: ctx?.color || "#2383e2" }}
-                  />
-                  <div className="min-w-0 flex-1" onClick={() => openEdit(ev)}>
-                    <p className="truncate font-medium">{ev.title}</p>
-                    <p className="text-xs text-ink-soft">
-                      {ev.all_day
-                        ? new Date(ev.start).toLocaleDateString("es-MX", {
-                            weekday: "long",
-                            day: "numeric",
-                            month: "short",
-                          })
-                        : formatDateTime(ev.start)}
-                      {ctx ? ` · ${ctx.name}` : ""}
-                      {ev.reminders?.length ? " · 🔔" : ""}
-                    </p>
-                  </div>
-                </GlassCard>
-              );
-            })}
+                  <p className={`truncate font-medium ${item.done ? "line-through opacity-60" : ""}`}>
+                    {KIND[item.kind]?.icon} {item.title}
+                  </p>
+                  <p className="truncate text-xs text-ink-soft">
+                    {item.all_day
+                      ? new Date(item.date).toLocaleDateString("es-MX", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "short",
+                        })
+                      : formatDateTime(item.date)}
+                    {item.detail ? ` · ${item.detail}` : ""}
+                    {item.context_id && byId[item.context_id]
+                      ? ` · ${byId[item.context_id].name}`
+                      : ""}
+                  </p>
+                </div>
+              </GlassCard>
+            ))}
           </div>
         </div>
       )}

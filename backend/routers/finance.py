@@ -1,4 +1,3 @@
-import calendar
 import math
 from datetime import datetime
 
@@ -20,17 +19,13 @@ from backend.models import (
     Transaction,
 )
 from backend.services import fx
+from backend.services.dates import add_months
 from backend.services.excel import build_budget_xlsx
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
 
-def _add_months(dt: datetime, months: int) -> datetime:
-    month = dt.month - 1 + months
-    year = dt.year + month // 12
-    month = month % 12 + 1
-    day = min(dt.day, calendar.monthrange(year, month)[1])
-    return dt.replace(year=year, month=month, day=day)
+_add_months = add_months  # se movio a services/dates.py y se comparte con el calendario
 
 
 # ---------- balances ----------
