@@ -42,7 +42,8 @@ export default function EventFormModal({
       } else {
         setForm({
           ...EMPTY,
-          start: prefillDate ? `${prefillDate}T09:00` : "",
+          // desde la vista diaria llega con hora; desde el mes solo la fecha
+          start: prefillDate ? (prefillDate.includes("T") ? prefillDate : `${prefillDate}T09:00`) : "",
         });
       }
       setError(null);

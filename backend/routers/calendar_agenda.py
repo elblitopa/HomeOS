@@ -59,7 +59,7 @@ def agenda(
     if "evento" in wanted:
         for e in db.query(Event).filter(Event.start >= desde, Event.start < hasta):
             add("evento", e.id, e.title, e.start, e.description, e.context_id,
-                {"all_day": e.all_day})
+                {"all_day": e.all_day, "end": e.end.isoformat() if e.end else None})
 
     if "tarea" in wanted:
         q = db.query(Todo).filter(
