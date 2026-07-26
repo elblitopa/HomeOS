@@ -20,7 +20,7 @@ const TABS = [
 ];
 
 // grupo aparte: no es parte del tracker, es la referencia de tipos de cambio
-const EXTRA_TABS = [{ key: "divisas", label: "💱 Divisas" }];
+const EXTRA_TABS = [{ key: "divisas", label: "Divisas" }];
 
 export default function FinancePage() {
   const [tab, setTab] = useState("resumen");
