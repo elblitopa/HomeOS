@@ -51,14 +51,18 @@ export default function CalendarPage() {
   const [colors, setColors] = useState(COLORES_BASE);
   const [coloresAbiertos, setColoresAbiertos] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
+  // hasta que carguen los ajustes no se consulta, para no pedir dos veces
+  const [listo, setListo] = useState(false);
 
   useEffect(() => {
     apiGet("/api/settings")
       .then((s) => {
         setWeekStart(s.week_starts_on || "monday");
         if (s.calendar_colors) setColors({ ...COLORES_BASE, ...s.calendar_colors });
+        if (Array.isArray(s.calendar_kinds)) setActive(new Set(s.calendar_kinds));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setListo(true));
     apiGet("/api/google/status")
       .then((s) => setGoogleReady(!!s.connected))
       .catch(() => {});
@@ -76,6 +80,7 @@ export default function CalendarPage() {
   const kindsParam = [...active].join(",");
 
   const refresh = useCallback(() => {
+    if (!listo) return;
     if (!kindsParam) return setItems([]);
     let from;
     let to;
@@ -92,7 +97,7 @@ export default function CalendarPage() {
     apiGet(`/api/calendar/agenda?from=${from}&to=${to}&kinds=${kindsParam}`)
       .then(setItems)
       .catch(() => {});
-  }, [view, day, year, month, kindsParam]);
+  }, [listo, view, day, year, month, kindsParam]);
 
   useEffect(refresh, [refresh]);
 
@@ -165,6 +170,8 @@ export default function CalendarPage() {
     setActive((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
+      // se recuerda en el servidor para que sobreviva al recargar
+      apiPut("/api/settings", { calendar_kinds: [...next] }).catch(() => {});
       return next;
     });
 

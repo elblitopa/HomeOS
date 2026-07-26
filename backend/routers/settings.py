@@ -16,6 +16,11 @@ WEEK_START_KEY = "week_starts_on"
 COLORS_KEY = "calendar_colors"
 WEEK_STARTS = ("monday", "sunday")
 
+KINDS_KEY = "calendar_kinds"
+
+# lo que se ve por defecto: todo menos las transacciones, que son muchas
+DEFAULT_KINDS = ["evento", "google", "tarea", "suscripcion", "pago", "meta", "nota"]
+
 DEFAULT_COLORS = {
     "evento": "#2383e2",
     "google": "#ea4335",
@@ -32,6 +37,7 @@ class SettingsPayload(BaseModel):
     discord_webhook_url: str | None = None
     week_starts_on: str | None = None
     calendar_colors: dict[str, str] | None = None
+    calendar_kinds: list[str] | None = None
 
 
 def _colors(db: Session) -> dict:
@@ -42,12 +48,24 @@ def _colors(db: Session) -> dict:
     return {**DEFAULT_COLORS, **{k: v for k, v in guardados.items() if k in DEFAULT_COLORS}}
 
 
+def _kinds(db: Session) -> list[str]:
+    raw = get_setting(db, KINDS_KEY)
+    if raw is None:
+        return DEFAULT_KINDS
+    try:
+        guardados = json.loads(raw)
+    except json.JSONDecodeError:
+        return DEFAULT_KINDS
+    return [k for k in guardados if k in DEFAULT_COLORS]
+
+
 @router.get("")
 def read_settings(db: Session = Depends(get_db)):
     return {
         "discord_webhook_url": get_setting(db, DISCORD_KEY),
         "week_starts_on": get_setting(db, WEEK_START_KEY) or "monday",
         "calendar_colors": _colors(db),
+        "calendar_kinds": _kinds(db),
     }
 
 
@@ -77,6 +95,13 @@ def write_settings(payload: SettingsPayload, db: Session = Depends(get_db)):
             if not re.fullmatch(r"#[0-9a-fA-F]{6}", value or ""):
                 raise HTTPException(400, f"Color inválido para {key}: {value}")
         set_setting(db, COLORS_KEY, json.dumps({**_colors(db), **nuevos}))
+
+    if "calendar_kinds" in data:
+        elegidos = data["calendar_kinds"] or []
+        for k in elegidos:
+            if k not in DEFAULT_COLORS:
+                raise HTTPException(400, f"Tipo de bloque desconocido: {k}")
+        set_setting(db, KINDS_KEY, json.dumps(elegidos))
 
     return read_settings(db)
 

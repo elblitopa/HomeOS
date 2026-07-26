@@ -56,7 +56,9 @@ export default function DayView({ date, items, colorOf, kindMeta, onCreate, onOp
     const conHora = [];
     const arriba = [];
     for (const item of items) {
-      const enTimeline = (item.kind === "evento" && !item.all_day) || item.kind === "tarea";
+      // van a la linea de tiempo las cosas con hora real; el resto a la franja
+      const conHorario = item.kind === "evento" || item.kind === "google";
+      const enTimeline = (conHorario && !item.all_day) || item.kind === "tarea";
       if (!enTimeline) {
         arriba.push(item);
         continue;
