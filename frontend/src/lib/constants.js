@@ -78,7 +78,22 @@ export const PERIODS = [
   { value: "anual", label: "Anual" },
 ];
 
-export const CURRENCIES = ["MXN", "USD", "EUR"];
+export const BASE_CURRENCY = "MXN";
+
+export const CURRENCIES = [
+  "MXN",
+  "USD",
+  "EUR",
+  "CAD",
+  "GBP",
+  "JPY",
+  "CNY",
+  "BRL",
+  "COP",
+  "ARS",
+  "CLP",
+  "CHF",
+];
 
 export const kindOf = (value) =>
   ACCOUNT_KINDS.find((k) => k.value === value) || ACCOUNT_KINDS[4];

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend import config
-from backend.database import Base, SessionLocal, engine
+from backend.database import Base, SessionLocal, engine, ensure_columns
 import backend.models  # noqa: F401  (registra los modelos en Base.metadata)
 from backend.models import Category, DEFAULT_CATEGORIES
 from backend.routers import (
@@ -24,10 +24,12 @@ from backend.routers import (
     uploads,
 )
 from backend.routers.apps import run_manifest_import
+from backend.services import fx
 from backend.services.scheduler import reminder_loop
 
 config.ensure_dirs()
 Base.metadata.create_all(engine)
+ensure_columns()
 
 with SessionLocal() as db:
     run_manifest_import(db)
@@ -35,6 +37,7 @@ with SessionLocal() as db:
         for name, icon in DEFAULT_CATEGORIES:
             db.add(Category(name=name, icon=icon, is_default=1))
         db.commit()
+    fx.ensure_base(db)
 
 
 @asynccontextmanager

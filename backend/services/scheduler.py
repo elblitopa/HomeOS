@@ -16,6 +16,7 @@ from backend.models import (
     get_setting,
 )
 from backend.notifications.discord import send_webhook
+from backend.services.fx import refresh_rates
 
 log = logging.getLogger("homeos.scheduler")
 
@@ -155,6 +156,12 @@ def _process_payment_notices(db, url: str, now: datetime) -> int:
     return sent
 
 
+def refresh_fx() -> int:
+    """Tipos de cambio: la funcion se auto-limita a una consulta cada 12 h."""
+    with SessionLocal() as db:
+        return refresh_rates(db).get("updated", 0)
+
+
 async def reminder_loop() -> None:
     log.info("Scheduler de recordatorios iniciado")
     while True:
@@ -164,4 +171,8 @@ async def reminder_loop() -> None:
                 log.info("Recordatorios enviados: %d", sent)
         except Exception:
             log.exception("Error en el loop de recordatorios")
+        try:
+            await asyncio.to_thread(refresh_fx)
+        except Exception:
+            log.exception("Error actualizando tipos de cambio")
         await asyncio.sleep(CHECK_EVERY_S)

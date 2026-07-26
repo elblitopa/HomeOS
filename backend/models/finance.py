@@ -8,6 +8,31 @@ from backend.database import Base
 # periodos: mensual | bimestral | trimestral | semestral | anual
 PERIOD_MONTHS = {"mensual": 1, "bimestral": 2, "trimestral": 3, "semestral": 6, "anual": 12}
 
+# divisa base de todo el panel
+BASE_CURRENCY = "MXN"
+
+
+class ExchangeRate(Base):
+    """Tipo de cambio de una divisa hacia MXN."""
+
+    __tablename__ = "exchange_rates"
+
+    code: Mapped[str] = mapped_column(String, primary_key=True)  # USD, EUR…
+    rate_to_mxn: Mapped[float] = mapped_column(Float, default=1.0)
+    # manual = el usuario fijo el tipo de cambio; la actualizacion automatica lo respeta
+    manual: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String, default="auto")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "code": self.code,
+            "rate_to_mxn": self.rate_to_mxn,
+            "manual": bool(self.manual),
+            "source": self.source,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 
 class Account(Base):
     """Cuenta: efectivo, débito, crédito, ingreso extra…"""
@@ -89,6 +114,9 @@ class Transaction(Base):
         ForeignKey("contexts.id", ondelete="SET NULL"), nullable=True
     )
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    # tipo de cambio a MXN vigente cuando ocurrio (1.0 si la cuenta ya es MXN);
+    # se congela para que el historial no cambie si el dolar sube o baja despues
+    fx_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     attachment_path: Mapped[str | None] = mapped_column(String, nullable=True)
     attachment_name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -105,6 +133,8 @@ class Transaction(Base):
             "to_goal_id": self.to_goal_id,
             "context_id": self.context_id,
             "occurred_at": self.occurred_at.isoformat(),
+            "fx_rate": self.fx_rate,
+            "amount_mxn": round(self.amount * (self.fx_rate or 1.0), 2),
             "attachment_path": self.attachment_path,
             "attachment_name": self.attachment_name,
         }

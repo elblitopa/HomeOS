@@ -9,13 +9,16 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import (
     Account,
+    BASE_CURRENCY,
     Category,
+    ExchangeRate,
     Goal,
     PERIOD_MONTHS,
     RecurringPayment,
     Subscription,
     Transaction,
 )
+from backend.services import fx
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
@@ -31,8 +34,12 @@ def _add_months(dt: datetime, months: int) -> datetime:
 # ---------- balances ----------
 
 def _account_balances(db: Session) -> dict[int, float]:
-    """balance = inicial + ingresos - egresos - transferencias salientes + entrantes"""
-    balances = {a.id: a.initial_balance for a in db.query(Account).all()}
+    """balance = inicial + ingresos - egresos - transferencias salientes + entrantes.
+    Cada balance queda en la divisa de su propia cuenta."""
+    accounts = db.query(Account).all()
+    balances = {a.id: a.initial_balance for a in accounts}
+    currency_of = {a.id: a.currency for a in accounts}
+    rates = {r.code: r.rate_to_mxn for r in db.query(ExchangeRate).all()}
 
     rows = (
         db.query(Transaction.account_id, Transaction.type, func.sum(Transaction.amount))
@@ -47,22 +54,30 @@ def _account_balances(db: Session) -> dict[int, float]:
         else:  # egreso y transferencia restan de la cuenta origen
             balances[account_id] -= total
 
+    # transferencias entrantes: el monto viene en la divisa de la cuenta origen,
+    # asi que se convierte si la cuenta destino usa otra
     incoming = (
-        db.query(Transaction.to_account_id, func.sum(Transaction.amount))
+        db.query(Transaction)
         .filter(Transaction.type == "transferencia", Transaction.to_account_id.isnot(None))
-        .group_by(Transaction.to_account_id)
         .all()
     )
-    for account_id, total in incoming:
-        if account_id in balances:
-            balances[account_id] += total
+    for tx in incoming:
+        if tx.to_account_id not in balances:
+            continue
+        src_rate = tx.fx_rate or rates.get(currency_of.get(tx.account_id), 1.0) or 1.0
+        dest_rate = rates.get(currency_of.get(tx.to_account_id), 1.0) or 1.0
+        balances[tx.to_account_id] += tx.amount * (src_rate / dest_rate)
 
     return {k: round(v, 2) for k, v in balances.items()}
 
 
 def _goal_saved(db: Session) -> dict[int, float]:
+    """Lo ahorrado se acumula en MXN, igual que el monto objetivo de la meta."""
     rows = (
-        db.query(Transaction.to_goal_id, func.sum(Transaction.amount))
+        db.query(
+            Transaction.to_goal_id,
+            func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
+        )
         .filter(Transaction.type == "transferencia", Transaction.to_goal_id.isnot(None))
         .group_by(Transaction.to_goal_id)
         .all()
@@ -86,8 +101,21 @@ class AccountPayload(BaseModel):
 @router.get("/accounts")
 def list_accounts(db: Session = Depends(get_db)):
     balances = _account_balances(db)
+    rates = {r.code: r.rate_to_mxn for r in db.query(ExchangeRate).all()}
     accounts = db.query(Account).order_by(Account.sort_order, Account.name).all()
-    return [{**a.to_dict(), "balance": balances.get(a.id, 0.0)} for a in accounts]
+    out = []
+    for a in accounts:
+        balance = balances.get(a.id, 0.0)
+        rate = rates.get(a.currency, 1.0)
+        out.append(
+            {
+                **a.to_dict(),
+                "balance": balance,
+                "balance_mxn": round(balance * rate, 2),
+                "fx_rate": rate,
+            }
+        )
+    return out
 
 
 @router.post("/accounts", status_code=201)
@@ -219,6 +247,9 @@ def create_transaction(payload: TransactionPayload, db: Session = Depends(get_db
     data = payload.model_dump()
     if not data.get("occurred_at"):
         data["occurred_at"] = datetime.now()
+    # congelar el tipo de cambio del momento para que el historial no se mueva
+    account = db.get(Account, payload.account_id)
+    data["fx_rate"] = fx.current_rate(db, account.currency if account else None)
     tx = Transaction(**data)
     db.add(tx)
     db.commit()
@@ -235,6 +266,9 @@ def update_transaction(tx_id: int, payload: TransactionPayload, db: Session = De
         if key == "occurred_at" and value is None:
             continue
         setattr(tx, key, value)
+    if tx.fx_rate is None:
+        account = db.get(Account, tx.account_id)
+        tx.fx_rate = fx.current_rate(db, account.currency if account else None)
     db.commit()
     return tx.to_dict()
 
@@ -439,6 +473,93 @@ def delete_subscription(item_id: int, db: Session = Depends(get_db)):
     return {"deleted": True}
 
 
+# ---------- divisas ----------
+
+class RateCreate(BaseModel):
+    code: str = Field(min_length=3, max_length=3)
+    rate_to_mxn: float | None = Field(default=None, gt=0)
+
+
+class RateUpdate(BaseModel):
+    rate_to_mxn: float | None = Field(default=None, gt=0)
+    manual: bool = False
+
+
+@router.get("/rates")
+def list_rates(db: Session = Depends(get_db)):
+    fx.ensure_base(db)
+    rows = db.query(ExchangeRate).order_by(ExchangeRate.code).all()
+    return [r.to_dict() for r in rows]
+
+
+@router.post("/rates", status_code=201)
+def add_rate(payload: RateCreate, db: Session = Depends(get_db)):
+    code = payload.code.upper()
+    if db.get(ExchangeRate, code):
+        raise HTTPException(409, f"{code} ya está en la lista")
+    manual = payload.rate_to_mxn is not None
+    rate = payload.rate_to_mxn
+    if not manual:
+        # intentar traerlo de la API al momento de agregarlo
+        table = fx.fetch_rates_to_mxn()
+        rate = table.get(code)
+        if not rate:
+            raise HTTPException(
+                400,
+                f"No se encontró el tipo de cambio de {code}. Captúralo manualmente.",
+            )
+    row = ExchangeRate(
+        code=code,
+        rate_to_mxn=round(rate, 6),
+        manual=1 if manual else 0,
+        source="manual" if manual else "auto",
+    )
+    db.add(row)
+    db.commit()
+    return row.to_dict()
+
+
+@router.put("/rates/{code}")
+def update_rate(code: str, payload: RateUpdate, db: Session = Depends(get_db)):
+    row = db.get(ExchangeRate, code.upper())
+    if not row:
+        raise HTTPException(404, "Divisa no encontrada")
+    if row.code == BASE_CURRENCY:
+        raise HTTPException(400, f"{BASE_CURRENCY} es la divisa base y siempre vale 1")
+    if payload.rate_to_mxn is not None:
+        row.rate_to_mxn = round(payload.rate_to_mxn, 6)
+        row.updated_at = datetime.now()
+    row.manual = 1 if payload.manual else 0
+    row.source = "manual" if payload.manual else "auto"
+    db.commit()
+    if not payload.manual:
+        fx.refresh_rates(db, force=True)
+        db.refresh(row)
+    return row.to_dict()
+
+
+@router.post("/rates/refresh")
+def refresh_rates(db: Session = Depends(get_db)):
+    result = fx.refresh_rates(db, force=True)
+    rows = db.query(ExchangeRate).order_by(ExchangeRate.code).all()
+    return {**result, "rates": [r.to_dict() for r in rows]}
+
+
+@router.delete("/rates/{code}")
+def delete_rate(code: str, db: Session = Depends(get_db)):
+    row = db.get(ExchangeRate, code.upper())
+    if not row:
+        raise HTTPException(404, "Divisa no encontrada")
+    if row.code == BASE_CURRENCY:
+        raise HTTPException(400, f"No puedes eliminar {BASE_CURRENCY}")
+    in_use = db.query(Account).filter(Account.currency == row.code).count()
+    if in_use:
+        raise HTTPException(409, f"{row.code} está en uso por {in_use} cuenta(s)")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True}
+
+
 # ---------- resumen ----------
 
 @router.get("/summary")
@@ -447,7 +568,7 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
     q = db.query(
         Transaction.category_id,
         Transaction.type,
-        func.sum(Transaction.amount),
+        func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
     ).filter(Transaction.type.in_(["ingreso", "egreso"]))
     if context_id:
         q = q.filter(Transaction.context_id == context_id)
@@ -459,7 +580,7 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
     qm = db.query(
         func.strftime("%Y-%m", Transaction.occurred_at),
         Transaction.type,
-        func.sum(Transaction.amount),
+        func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
     ).filter(Transaction.type.in_(["ingreso", "egreso"]))
     if context_id:
         qm = qm.filter(Transaction.context_id == context_id)
@@ -471,7 +592,10 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
         entry["ingresos" if tx_type == "ingreso" else "egresos"] += total
 
     start_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    qt = db.query(Transaction.type, func.sum(Transaction.amount)).filter(
+    qt = db.query(
+        Transaction.type,
+        func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
+    ).filter(
         Transaction.type.in_(["ingreso", "egreso"]),
         Transaction.occurred_at >= start_today,
     )

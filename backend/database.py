@@ -33,3 +33,20 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# Columnas agregadas despues de que la base ya existia. create_all() solo crea
+# tablas nuevas, no columnas nuevas, asi que estas se agregan a mano.
+MIGRATIONS = [
+    ("transactions", "fx_rate", "fx_rate FLOAT"),
+]
+
+
+def ensure_columns() -> None:
+    with engine.begin() as conn:
+        for table, column, ddl in MIGRATIONS:
+            info = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+            if not info:
+                continue  # la tabla aun no existe; create_all la crea completa
+            if column not in {row[1] for row in info}:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {ddl}")

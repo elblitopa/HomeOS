@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import { fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
+import { BASE_CURRENCY, fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
 import {
   AccountModal,
   GoalModal,
@@ -60,6 +60,9 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
   const groups = {};
   for (const a of accounts) (groups[a.kind] ||= []).push(a);
 
+  const totalMxn = accounts.reduce((sum, a) => sum + (a.balance_mxn ?? a.balance ?? 0), 0);
+  const hasForeign = accounts.some((a) => a.currency !== BASE_CURRENCY);
+
   const quick = [
     { label: "＋ Ingreso", action: () => setModal({ type: "tx", txType: "ingreso" }) },
     { label: "− Egreso", action: () => setModal({ type: "tx", txType: "egreso" }) },
@@ -74,6 +77,15 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       {/* columna principal: cuentas */}
       <div className="flex flex-col gap-6">
+        {accounts.length > 0 && (
+          <GlassCard className="p-4">
+            <p className="text-xs text-ink-soft">
+              Total de todas tus cuentas{hasForeign ? " (convertido a MXN)" : ""}
+            </p>
+            <p className="text-2xl font-bold">{fmtMoney(totalMxn)}</p>
+          </GlassCard>
+        )}
+
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <GlassCard className="p-4">
             <p className="text-xs text-ink-soft">Hoy · Ingresos</p>
@@ -124,6 +136,11 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                             </span>
                           </div>
                           <p className="text-xl font-bold">{fmtMoney(a.balance, a.currency)}</p>
+                          {a.currency !== BASE_CURRENCY && (
+                            <p className="text-xs font-medium text-accent">
+                              ≈ {fmtMoney(a.balance_mxn)} MXN
+                            </p>
+                          )}
                           <p className="text-xs text-ink-soft">
                             {a.bank ? `${a.bank} · ` : ""}
                             {a.currency}

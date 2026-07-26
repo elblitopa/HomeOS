@@ -12,8 +12,10 @@ from backend.models.event import Event
 from backend.models.file_entry import FileEntry, kind_for
 from backend.models.finance import (
     Account,
+    BASE_CURRENCY,
     Category,
     DEFAULT_CATEGORIES,
+    ExchangeRate,
     Goal,
     PERIOD_MONTHS,
     RecurringPayment,
@@ -29,6 +31,8 @@ from backend.models.todo import Todo, TodoEntry
 __all__ = [
     "Account",
     "AppEntry",
+    "BASE_CURRENCY",
+    "ExchangeRate",
     "BizDoc",
     "BizMessage",
     "BusinessInfo",
