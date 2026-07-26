@@ -21,12 +21,17 @@ class CalendarPayload(BaseModel):
     calendar_id: str
 
 
+class VisiblePayload(BaseModel):
+    calendar_ids: list[str] | None = None
+
+
 class EventPayload(BaseModel):
     title: str = Field(min_length=1)
     start: datetime
     end: datetime | None = None
     all_day: bool = False
     description: str | None = None
+    calendar_id: str | None = None  # calendario donde vive el evento
 
 
 @router.get("/status")
@@ -40,6 +45,7 @@ def status(db: Session = Depends(get_db)):
         "redirect_uri": gcal.REDIRECT_URI,
         "calendar_id": gcal.calendar_id(db),
         "calendars": [],
+        "visible_calendars": gcal.visible_calendars(db),
         "error": None,
     }
     if conectado:
@@ -48,6 +54,12 @@ def status(db: Session = Depends(get_db)):
         except gcal.GoogleError as e:
             info["error"] = str(e)
     return info
+
+
+@router.put("/visible-calendars")
+def set_visible(payload: VisiblePayload, db: Session = Depends(get_db)):
+    gcal.set_visible_calendars(db, payload.calendar_ids)
+    return {"visible_calendars": gcal.visible_calendars(db)}
 
 
 @router.put("/credentials")
@@ -105,16 +117,16 @@ def create_event(payload: EventPayload, db: Session = Depends(get_db)):
 def update_event(event_id: str, payload: EventPayload, db: Session = Depends(get_db)):
     try:
         gcal.update_event(db, event_id, payload.title, payload.start, payload.end,
-                          payload.all_day, payload.description)
+                          payload.all_day, payload.description, payload.calendar_id)
         return {"updated": True}
     except gcal.GoogleError as e:
         raise HTTPException(502, str(e))
 
 
 @router.delete("/events/{event_id}")
-def delete_event(event_id: str, db: Session = Depends(get_db)):
+def delete_event(event_id: str, calendar_id: str | None = None, db: Session = Depends(get_db)):
     try:
-        gcal.delete_event(db, event_id)
+        gcal.delete_event(db, event_id, calendar_id)
         return {"deleted": True}
     except gcal.GoogleError as e:
         raise HTTPException(502, str(e))

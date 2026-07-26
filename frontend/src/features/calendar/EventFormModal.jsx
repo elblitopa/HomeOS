@@ -43,6 +43,8 @@ export default function EventFormModal({
           all_day: event.all_day,
           reminders: event.reminders || [],
           source: event.source || "homeos",
+          calendar_id: event.calendar_id || null,
+          calendar_name: event.calendar_name || null,
         });
       } else {
         setForm({
@@ -74,8 +76,10 @@ export default function EventFormModal({
         all_day: form.all_day,
       };
       if (esGoogle) {
-        if (event) await apiPut(`/api/google/events/${event.id}`, base);
-        else await apiPost("/api/google/events", base);
+        // se edita en el calendario donde vive, no en el de escritura
+        const conCal = { ...base, calendar_id: form.calendar_id || null };
+        if (event) await apiPut(`/api/google/events/${encodeURIComponent(event.id)}`, conCal);
+        else await apiPost("/api/google/events", conCal);
       } else {
         const payload = {
           ...base,
@@ -97,7 +101,11 @@ export default function EventFormModal({
     const donde = esGoogle ? " de Google Calendar" : "";
     if (!confirm(`¿Eliminar el evento "${event.title}"${donde}?`)) return;
     try {
-      await apiDelete(esGoogle ? `/api/google/events/${event.id}` : `/api/events/${event.id}`);
+      const url = esGoogle
+        ? `/api/google/events/${encodeURIComponent(event.id)}` +
+          (form.calendar_id ? `?calendar_id=${encodeURIComponent(form.calendar_id)}` : "")
+        : `/api/events/${event.id}`;
+      await apiDelete(url);
       onSaved();
     } catch (e) {
       setError(e.message);
@@ -124,7 +132,9 @@ export default function EventFormModal({
             Guardar en
             {event ? (
               <p className="text-sm font-normal text-ink-soft">
-                {esGoogle ? "📆 Google Calendar" : "🏠 HomeOS"}
+                {esGoogle
+                  ? `📆 Google · ${form.calendar_name || "Calendar"}`
+                  : "🏠 HomeOS"}
               </p>
             ) : (
               <select

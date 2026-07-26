@@ -77,6 +77,20 @@ export default function GoogleCard() {
     cargar();
   };
 
+  const alternarCalendario = async (id, mostrar) => {
+    // null significa "todos"; al destildar uno hay que volverlo lista explícita
+    const actuales = status.visible_calendars ?? status.calendars.map((c) => c.id);
+    const nuevos = mostrar
+      ? [...new Set([...actuales, id])]
+      : actuales.filter((x) => x !== id);
+    setStatus({ ...status, visible_calendars: nuevos }); // respuesta inmediata
+    try {
+      await apiPut("/api/google/visible-calendars", { calendar_ids: nuevos });
+    } finally {
+      cargar();
+    }
+  };
+
   if (!status) return null;
 
   return (
@@ -192,6 +206,29 @@ export default function GoogleCard() {
 
       {status.connected && (
         <div className="flex flex-col gap-3">
+          {status.calendars.length > 0 && (
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              Calendarios que se ven en HomeOS
+              {status.calendars.map((c) => {
+                const visible =
+                  status.visible_calendars === null ||
+                  status.visible_calendars.includes(c.id);
+                return (
+                  <label key={c.id} className="flex items-center gap-2 text-sm font-normal">
+                    <input
+                      type="checkbox"
+                      checked={visible}
+                      onChange={() => alternarCalendario(c.id, !visible)}
+                      className="h-4 w-4 accent-[#2383e2]"
+                    />
+                    {c.name}
+                    {c.primary && <span className="text-xs text-ink-soft">(principal)</span>}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
           {status.calendars.length > 0 && (
             <label className="flex flex-col gap-1 text-sm font-medium">
               Calendario donde se guardan los eventos nuevos

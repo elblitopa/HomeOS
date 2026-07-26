@@ -31,7 +31,8 @@ REDIRECT_URI = "http://localhost:8777/api/google/callback"
 CLIENT_ID_KEY = "google_client_id"
 CLIENT_SECRET_KEY = "google_client_secret"
 TOKEN_KEY = "google_token"
-CALENDAR_KEY = "google_calendar_id"
+CALENDAR_KEY = "google_calendar_id"        # donde se guardan los eventos nuevos
+VISIBLE_KEY = "google_visible_calendars"   # cuales se muestran en el calendario
 
 
 class GoogleError(Exception):
@@ -198,8 +199,24 @@ def calendar_id(db: Session) -> str:
     return get_setting(db, CALENDAR_KEY) or "primary"
 
 
-def list_events(db: Session, desde: datetime, hasta: datetime) -> list[dict]:
-    data = _api(db, "GET", f"/calendars/{urllib.parse.quote(calendar_id(db))}/events", params={
+def visible_calendars(db: Session) -> list[str] | None:
+    """Ids de los calendarios que se muestran. None = todos."""
+    raw = get_setting(db, VISIBLE_KEY)
+    if not raw:
+        return None
+    try:
+        ids = json.loads(raw)
+        return ids if isinstance(ids, list) else None
+    except json.JSONDecodeError:
+        return None
+
+
+def set_visible_calendars(db: Session, ids: list[str] | None) -> None:
+    set_setting(db, VISIBLE_KEY, json.dumps(ids) if ids is not None else None)
+
+
+def _events_of(db: Session, cal: dict, desde: datetime, hasta: datetime) -> list[dict]:
+    data = _api(db, "GET", f"/calendars/{urllib.parse.quote(cal['id'])}/events", params={
         "timeMin": desde.astimezone().isoformat(),
         "timeMax": hasta.astimezone().isoformat(),
         "singleEvents": "true",     # expande los eventos que se repiten
@@ -220,7 +237,25 @@ def list_events(db: Session, desde: datetime, hasta: datetime) -> list[dict]:
             "end": fin,
             "all_day": all_day,
             "link": e.get("htmlLink"),
+            "calendar_id": cal["id"],
+            "calendar_name": cal["name"],
         })
+    return eventos
+
+
+def list_events(db: Session, desde: datetime, hasta: datetime) -> list[dict]:
+    """Eventos de todos los calendarios visibles, no solo del principal."""
+    elegidos = visible_calendars(db)
+    eventos: list[dict] = []
+    for cal in calendars(db):
+        if elegidos is not None and cal["id"] not in elegidos:
+            continue
+        try:
+            eventos.extend(_events_of(db, cal, desde, hasta))
+        except GoogleError as e:
+            # un calendario que falle no debe tumbar a los demas
+            log.warning("No se pudieron leer los eventos de %s: %s", cal["name"], e)
+    eventos.sort(key=lambda e: e["start"])
     return eventos
 
 
@@ -236,17 +271,20 @@ def create_event(db: Session, title: str, start: datetime, end: datetime | None,
 
 
 def update_event(db: Session, event_id: str, title: str, start: datetime,
-                 end: datetime | None, all_day: bool, description: str | None) -> dict:
+                 end: datetime | None, all_day: bool, description: str | None,
+                 cal_id: str | None = None) -> dict:
+    """cal_id es el calendario donde vive el evento, que no tiene por que ser
+    el mismo donde se guardan los nuevos."""
     cuerpo = {
         "summary": title,
         "description": description,
         "start": _a_google(start, all_day),
         "end": _a_google(end or start + timedelta(hours=1), all_day),
     }
-    path = f"/calendars/{urllib.parse.quote(calendar_id(db))}/events/{urllib.parse.quote(event_id)}"
-    return _api(db, "PATCH", path, cuerpo)
+    destino = urllib.parse.quote(cal_id or calendar_id(db))
+    return _api(db, "PATCH", f"/calendars/{destino}/events/{urllib.parse.quote(event_id)}", cuerpo)
 
 
-def delete_event(db: Session, event_id: str) -> None:
-    path = f"/calendars/{urllib.parse.quote(calendar_id(db))}/events/{urllib.parse.quote(event_id)}"
-    _api(db, "DELETE", path)
+def delete_event(db: Session, event_id: str, cal_id: str | None = None) -> None:
+    destino = urllib.parse.quote(cal_id or calendar_id(db))
+    _api(db, "DELETE", f"/calendars/{destino}/events/{urllib.parse.quote(event_id)}")

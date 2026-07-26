@@ -185,6 +185,8 @@ export default function CalendarPage() {
         end: item.end,
         all_day: item.all_day,
         source: "google",
+        calendar_id: item.calendar_id,
+        calendar_name: item.calendar_name,
       });
       setPrefillDate(null);
       setModalOpen(true);

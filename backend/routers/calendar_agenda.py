@@ -67,10 +67,13 @@ def agenda(
     if "google" in wanted and gcal.is_connected(db):
         try:
             for e in gcal.list_events(db, desde, hasta):
-                add("google", e["id"], e["title"], e["start"], e["description"], None,
+                add("google", e["id"], e["title"], e["start"],
+                    e["description"] or e["calendar_name"], None,
                     {"all_day": e["all_day"],
                      "end": e["end"].isoformat() if e["end"] else None,
-                     "link": e["link"]})
+                     "link": e["link"],
+                     "calendar_id": e["calendar_id"],
+                     "calendar_name": e["calendar_name"]})
         except gcal.GoogleError:
             pass  # si Google falla, el resto del calendario debe seguir funcionando
 
