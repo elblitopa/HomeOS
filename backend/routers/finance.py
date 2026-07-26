@@ -1,7 +1,8 @@
 import calendar
+import math
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from backend.models import (
     Transaction,
 )
 from backend.services import fx
+from backend.services.excel import build_budget_xlsx
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
@@ -94,6 +96,7 @@ class AccountPayload(BaseModel):
     bank: str | None = None
     currency: str = "MXN"
     initial_balance: float = 0.0
+    expected_income: float = 0.0
     color: str = "#2383e2"
     banner_path: str | None = None
     sort_order: int = 0
@@ -631,6 +634,160 @@ def delete_rate(code: str, db: Session = Depends(get_db)):
     db.delete(row)
     db.commit()
     return {"deleted": True}
+
+
+# ---------- presupuesto ----------
+
+MONTHS_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
+
+def _months_left(deadline: datetime) -> int:
+    """Meses que faltan para una fecha. Minimo 1: si ya paso o es este mes,
+    lo que falte se necesita ahora."""
+    days = (deadline.date() - datetime.now().date()).days
+    return max(1, math.ceil(days / 30.44))
+
+
+def _budget_data(db: Session) -> dict:
+    """Cuanto necesitas al mes para cubrir todo lo que ya te comprometiste."""
+    rates = {r.code: r.rate_to_mxn for r in db.query(ExchangeRate).all()}
+    accounts = {a.id: a for a in db.query(Account).all()}
+
+    def mxn(amount: float, currency: str | None) -> float:
+        return round(amount * rates.get(currency or BASE_CURRENCY, 1.0), 2)
+
+    def account_name(account_id: int | None) -> str | None:
+        account = accounts.get(account_id) if account_id else None
+        return account.name if account else None
+
+    commitments: list[dict] = []
+
+    for s in db.query(Subscription).order_by(Subscription.name).all():
+        per_month = s.amount / PERIOD_MONTHS.get(s.period, 1)
+        commitments.append({
+            "kind": "Suscripción",
+            "name": s.name,
+            "amount": s.amount,
+            "currency": s.currency or BASE_CURRENCY,
+            "period": s.period,
+            "monthly_mxn": mxn(per_month, s.currency),
+            "account": account_name(s.account_id),
+            "next_due": s.next_due.isoformat() if s.next_due else None,
+            "note": None,
+        })
+
+    for r in db.query(RecurringPayment).order_by(RecurringPayment.name).all():
+        liquidada = r.installments_paid >= r.installments_total
+        per_month = 0.0 if liquidada else r.installment_amount / PERIOD_MONTHS.get(r.frequency, 1)
+        commitments.append({
+            "kind": "Pago recurrente",
+            "name": r.name,
+            "amount": r.installment_amount,
+            "currency": r.currency or BASE_CURRENCY,
+            "period": r.frequency,
+            "monthly_mxn": mxn(per_month, r.currency),
+            "account": account_name(r.account_id),
+            "next_due": r.next_due.isoformat() if r.next_due else None,
+            "note": "liquidada" if liquidada else f"{r.installments_paid}/{r.installments_total} cuotas",
+        })
+
+    # las metas ya se manejan en MXN, igual que su monto objetivo
+    saved = _goal_saved(db)
+    for g in db.query(Goal).order_by(Goal.name).all():
+        falta = max(0.0, g.target_amount - saved.get(g.id, 0.0))
+        if g.deadline and falta > 0:
+            per_month = round(falta / _months_left(g.deadline), 2)
+            note = f"faltan {fmt_money_note(falta)} para la fecha límite"
+        elif falta <= 0:
+            per_month, note = 0.0, "meta alcanzada"
+        else:
+            per_month, note = 0.0, "sin fecha límite, no se presupuesta"
+        commitments.append({
+            "kind": "Meta",
+            "name": g.name,
+            "amount": g.target_amount,
+            "currency": BASE_CURRENCY,
+            "period": "—",
+            "monthly_mxn": per_month,
+            "account": None,
+            "next_due": g.deadline.isoformat() if g.deadline else None,
+            "note": note,
+        })
+
+    # ingresos reales del mes en curso
+    start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    real = dict(
+        db.query(
+            Transaction.account_id,
+            func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
+        )
+        .filter(
+            Transaction.type == "ingreso",
+            Transaction.occurred_at >= start,
+            Transaction.occurred_at < _add_months(start, 1),
+        )
+        .group_by(Transaction.account_id)
+        .all()
+    )
+
+    income = [
+        {
+            "account": a.name,
+            "currency": a.currency,
+            "expected": a.expected_income or 0.0,
+            "expected_mxn": mxn(a.expected_income or 0.0, a.currency),
+            "actual_mxn": round(real.get(a.id, 0.0), 2),
+        }
+        for a in sorted(accounts.values(), key=lambda x: (x.sort_order, x.name))
+    ]
+
+    def suma(kind: str) -> float:
+        return round(sum(c["monthly_mxn"] for c in commitments if c["kind"] == kind), 2)
+
+    total_commitments = round(sum(c["monthly_mxn"] for c in commitments), 2)
+    total_expected = round(sum(i["expected_mxn"] for i in income), 2)
+    total_actual = round(sum(i["actual_mxn"] for i in income), 2)
+    now = datetime.now()
+
+    return {
+        "month_label": f"{MONTHS_ES[now.month - 1]} {now.year}",
+        "commitments": commitments,
+        "income": income,
+        "totals": {
+            "subscriptions": suma("Suscripción"),
+            "recurring": suma("Pago recurrente"),
+            "goals": suma("Meta"),
+            "commitments": total_commitments,
+            "expected_income": total_expected,
+            "actual_income": total_actual,
+            "balance_expected": round(total_expected - total_commitments, 2),
+            "balance_actual": round(total_actual - total_commitments, 2),
+        },
+    }
+
+
+def fmt_money_note(value: float) -> str:
+    return f"${value:,.2f}"
+
+
+@router.get("/budget")
+def budget(db: Session = Depends(get_db)):
+    return _budget_data(db)
+
+
+@router.get("/budget/export.xlsx")
+def export_budget(db: Session = Depends(get_db)):
+    data = _budget_data(db)
+    content = build_budget_xlsx(data)
+    stamp = datetime.now().strftime("%Y-%m")
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="presupuesto-{stamp}.xlsx"'},
+    )
 
 
 # ---------- resumen ----------

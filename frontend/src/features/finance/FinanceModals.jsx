@@ -80,6 +80,7 @@ export function AccountModal({ open, account, onClose, onSaved }) {
     bank: account?.bank || "",
     currency: account?.currency || "MXN",
     initial_balance: account?.initial_balance ?? 0,
+    expected_income: account?.expected_income ?? 0,
     color: account?.color || CONTEXT_COLORS[0],
     banner_path: account?.banner_path || null,
   });
@@ -108,6 +109,7 @@ export function AccountModal({ open, account, onClose, onSaved }) {
         name: form.name.trim(),
         bank: form.bank.trim() || null,
         initial_balance: Number(form.initial_balance) || 0,
+        expected_income: Number(form.expected_income) || 0,
       };
       if (account) await apiPut(`/api/finance/accounts/${account.id}`, payload);
       else await apiPost("/api/finance/accounts", payload);
@@ -170,6 +172,21 @@ export function AccountModal({ open, account, onClose, onSaved }) {
           <label className="flex flex-col gap-1 text-sm font-medium">
             Saldo inicial
             <input type="number" step="0.01" className={inputCls} value={form.initial_balance} onChange={set("initial_balance")} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Ingreso esperado al mes
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              className={inputCls}
+              value={form.expected_income}
+              onChange={set("expected_income")}
+              placeholder="0"
+            />
+            <span className="text-[11px] font-normal text-ink-soft">
+              Se usa en el Presupuesto. Déjalo en 0 si no aplica.
+            </span>
           </label>
           <div className="flex flex-col gap-1 text-sm font-medium">
             Color

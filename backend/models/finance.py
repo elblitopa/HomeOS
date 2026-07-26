@@ -51,6 +51,8 @@ class Account(Base):
     bank: Mapped[str | None] = mapped_column(String, nullable=True)
     currency: Mapped[str] = mapped_column(String, default="MXN")
     initial_balance: Mapped[float] = mapped_column(Float, default=0.0)
+    # cuanto esperas que entre a esta cuenta cada mes (sueldo, renta, etc.)
+    expected_income: Mapped[float] = mapped_column(Float, default=0.0)
     color: Mapped[str] = mapped_column(String, default="#2383e2")
     banner_path: Mapped[str | None] = mapped_column(String, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -65,6 +67,7 @@ class Account(Base):
             "bank": self.bank,
             "currency": self.currency,
             "initial_balance": self.initial_balance,
+            "expected_income": self.expected_income or 0.0,
             "color": self.color,
             "banner_path": self.banner_path,
             "sort_order": self.sort_order,
