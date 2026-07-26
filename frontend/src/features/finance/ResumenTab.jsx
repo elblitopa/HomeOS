@@ -112,9 +112,11 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
   ];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+    // filas: la primera se ajusta a la navegación rápida y la segunda
+    // absorbe el alto sobrante, para que no quede hueco entre las tarjetas
+    <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:grid-rows-[auto_1fr]">
       {/* navegación rápida: hasta arriba en móvil, columna derecha en escritorio */}
-      <GlassCard className="p-4 lg:col-start-2 lg:row-start-1">
+      <GlassCard className="p-4 lg:col-start-2 lg:row-start-1 lg:self-start">
         <h2 className="mb-2 text-sm font-semibold text-ink-soft">Navegación rápida</h2>
         <div className="grid grid-cols-2 gap-2">
           {quick.map((q) => (
@@ -225,7 +227,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
       </div>
 
       {/* metas, deudas y suscripciones */}
-      <div className="flex flex-col gap-4 lg:col-start-2 lg:row-start-2">
+      <div className="flex flex-col gap-4 lg:col-start-2 lg:row-start-2 lg:self-start">
         <GlassCard className="p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink-soft">🎯 Metas</h2>
