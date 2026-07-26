@@ -288,8 +288,8 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db)):
 
 class GoalPayload(BaseModel):
     name: str = Field(min_length=1)
-    period: str = "mensual"
     target_amount: float = Field(gt=0)
+    deadline: datetime | None = None
 
 
 @router.get("/goals")

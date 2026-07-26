@@ -42,14 +42,28 @@ MIGRATIONS = [
     ("accounts", "banner_path", "banner_path VARCHAR"),
     ("exchange_rates", "kind", "kind VARCHAR DEFAULT 'fiat'"),
     ("exchange_rates", "api_id", "api_id VARCHAR"),
+    ("goals", "deadline", "deadline DATETIME"),
+]
+
+# Columnas que dejaron de usarse (necesita SQLite 3.35+, incluido desde Python 3.11)
+DROP_COLUMNS = [
+    ("goals", "period"),
 ]
 
 
 def ensure_columns() -> None:
     with engine.begin() as conn:
+
+        def columns_of(table: str) -> set[str]:
+            return {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+
         for table, column, ddl in MIGRATIONS:
-            info = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
-            if not info:
+            cols = columns_of(table)
+            if not cols:
                 continue  # la tabla aun no existe; create_all la crea completa
-            if column not in {row[1] for row in info}:
+            if column not in cols:
                 conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+        for table, column in DROP_COLUMNS:
+            if column in columns_of(table):
+                conn.exec_driver_sql(f"ALTER TABLE {table} DROP COLUMN {column}")

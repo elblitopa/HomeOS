@@ -154,16 +154,21 @@ class Goal(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    period: Mapped[str] = mapped_column(String, default="mensual")
     target_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    # fecha limite opcional para alcanzar la meta
+    deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self, saved: float = 0.0) -> dict:
+        days_left = None
+        if self.deadline:
+            days_left = (self.deadline.date() - datetime.now().date()).days
         return {
             "id": self.id,
             "name": self.name,
-            "period": self.period,
             "target_amount": self.target_amount,
+            "deadline": self.deadline.isoformat() if self.deadline else None,
+            "days_left": days_left,
             "saved_amount": saved,
             "progress": min(1.0, saved / self.target_amount) if self.target_amount else 0,
         }

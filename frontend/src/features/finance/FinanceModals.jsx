@@ -397,8 +397,8 @@ export function TransactionModal({ open, tx, type, accounts, categories, context
 export function GoalModal({ open, goal, onClose, onSaved }) {
   const { form, set, error, setError, saving, setSaving } = useForm(open, {
     name: goal?.name || "",
-    period: goal?.period || "mensual",
     target_amount: goal?.target_amount ?? "",
+    deadline: goal?.deadline ? goal.deadline.slice(0, 10) : "",
   });
 
   const save = async () => {
@@ -407,8 +407,8 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
     try {
       const payload = {
         name: form.name.trim(),
-        period: form.period,
         target_amount: Number(form.target_amount),
+        deadline: form.deadline ? `${form.deadline}T23:59` : null,
       };
       if (goal) await apiPut(`/api/finance/goals/${goal.id}`, payload);
       else await apiPost("/api/finance/goals", payload);
@@ -435,18 +435,12 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
         </label>
         <div className="grid grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Plazo
-            <select className={selectCls} value={form.period} onChange={set("period")}>
-              {PERIODS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm font-medium">
             Monto objetivo
             <input type="number" step="0.01" min="0" className={inputCls} value={form.target_amount} onChange={set("target_amount")} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Fecha límite (opcional)
+            <input type="date" className={inputCls} value={form.deadline} onChange={set("deadline")} />
           </label>
         </div>
         <p className="text-xs text-ink-soft">

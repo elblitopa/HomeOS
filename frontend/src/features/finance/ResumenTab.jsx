@@ -185,9 +185,21 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
             {goals.length === 0 && <p className="text-xs text-ink-soft">Sin metas todavía.</p>}
             {goals.map((g) => (
               <div key={g.id} className="cursor-pointer" onClick={() => setModal({ type: "goal", data: g })}>
-                <div className="mb-1 flex items-baseline justify-between">
+                <div className="mb-1 flex items-baseline justify-between gap-2">
                   <p className="text-sm font-medium">{g.name}</p>
-                  <p className="text-xs text-ink-soft">{periodLabel(g.period)}</p>
+                  {g.deadline && (
+                    <p
+                      className={`shrink-0 text-xs ${
+                        g.days_left < 0 ? "font-medium text-err" : "text-ink-soft"
+                      }`}
+                    >
+                      {g.days_left < 0
+                        ? `venció hace ${Math.abs(g.days_left)} d`
+                        : g.days_left === 0
+                          ? "vence hoy"
+                          : `faltan ${g.days_left} d`}
+                    </p>
+                  )}
                 </div>
                 <ProgressBar value={g.progress} />
                 <p className="mt-1 text-xs text-ink-soft">
