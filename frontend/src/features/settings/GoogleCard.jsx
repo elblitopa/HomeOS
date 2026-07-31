@@ -12,6 +12,7 @@ export default function GoogleCard() {
   const [busy, setBusy] = useState(false);
   const [guia, setGuia] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [espejo, setEspejo] = useState(null);
 
   const cargar = useCallback(() => {
     apiGet("/api/google/status")
@@ -19,6 +20,11 @@ export default function GoogleCard() {
         setStatus(s);
         setClientId(s.client_id || "");
       })
+      .catch(() => {});
+    apiGet("/api/settings")
+      .then((s) =>
+        setEspejo({ todos: s.google_sync_todos, finance: s.google_sync_finance })
+      )
       .catch(() => {});
   }, []);
 
@@ -88,6 +94,41 @@ export default function GoogleCard() {
       await apiPut("/api/google/visible-calendars", { calendar_ids: nuevos });
     } finally {
       cargar();
+    }
+  };
+
+  const alternarEspejo = async (campo, valor) => {
+    const key = campo === "todos" ? "google_sync_todos" : "google_sync_finance";
+    setEspejo((e) => ({ ...e, [campo]: valor })); // respuesta inmediata
+    try {
+      await apiPut("/api/settings", { [key]: valor });
+    } finally {
+      cargar();
+    }
+  };
+
+  const sincronizar = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await apiPost("/api/google/sync");
+      if (r.error) throw new Error(r.error);
+      const partes = [];
+      if (r.creados) partes.push(`${r.creados} creado${r.creados > 1 ? "s" : ""}`);
+      if (r.actualizados) partes.push(`${r.actualizados} actualizado${r.actualizados > 1 ? "s" : ""}`);
+      if (r.borrados) partes.push(`${r.borrados} quitado${r.borrados > 1 ? "s" : ""}`);
+      setMsg({
+        ok: !r.errores?.length,
+        text: r.errores?.length
+          ? `Sincronizado con problemas: ${r.errores[0]}`
+          : partes.length
+            ? `Google actualizado: ${partes.join(", ")}.`
+            : "Google ya estaba al día.",
+      });
+    } catch (e) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -246,6 +287,41 @@ export default function GoogleCard() {
               </select>
             </label>
           )}
+          {/* espejo hacia Google: lo de HomeOS se copia al calendario de
+              arriba para que el celular avise por su cuenta */}
+          {espejo && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-glass-border bg-surface/50 p-3">
+              <span className="text-sm font-medium">Subir a Google</span>
+              <p className="text-xs text-ink-soft">
+                Se copian al calendario de arriba para que te llegue la notificación al
+                celular. Los eventos se eligen uno por uno al crearlos.
+              </p>
+              <label className="mt-1 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={espejo.todos}
+                  onChange={(e) => alternarEspejo("todos", e.target.checked)}
+                  className="h-4 w-4 accent-[#2383e2]"
+                />
+                Tareas con fecha límite
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={espejo.finance}
+                  onChange={(e) => alternarEspejo("finance", e.target.checked)}
+                  className="h-4 w-4 accent-[#2383e2]"
+                />
+                Pagos y suscripciones
+              </label>
+              <div className="mt-1">
+                <Button variant="ghost" onClick={sincronizar} disabled={busy}>
+                  {busy ? "Sincronizando…" : "🔄 Sincronizar ahora"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {status.error && <p className="text-sm text-err">{status.error}</p>}
           <div>
             <Button variant="danger" onClick={desconectar}>

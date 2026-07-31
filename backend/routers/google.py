@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import set_setting
 from backend.services import google_calendar as gcal
+from backend.services import google_sync
 
 router = APIRouter(prefix="/api/google", tags=["google"])
 
@@ -95,6 +96,14 @@ def callback(code: str | None = None, error: str | None = None, db: Session = De
 def choose_calendar(payload: CalendarPayload, db: Session = Depends(get_db)):
     set_setting(db, gcal.CALENDAR_KEY, payload.calendar_id)
     return {"calendar_id": payload.calendar_id}
+
+
+@router.post("/sync")
+def sync_now(db: Session = Depends(get_db)):
+    """Sube a Google todo lo que falte, ahora mismo. Tambien corre solo cada minuto."""
+    if not gcal.is_connected(db):
+        raise HTTPException(400, "Primero conecta tu cuenta de Google")
+    return google_sync.sync_seguro(db)
 
 
 @router.post("/disconnect")

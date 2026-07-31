@@ -1,11 +1,12 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from backend.database import get_db
 from backend.models import Todo, TodoEntry
+from backend.services.google_sync import sync_aparte
 
 router = APIRouter(prefix="/api/todos", tags=["todos"])
 
@@ -73,26 +74,29 @@ def get_todo(todo_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-def create_todo(payload: TodoPayload, db: Session = Depends(get_db)):
+def create_todo(payload: TodoPayload, tareas: BackgroundTasks, db: Session = Depends(get_db)):
     todo = Todo(**payload.model_dump())
     db.add(todo)
     db.commit()
+    tareas.add_task(sync_aparte)
     return todo.to_dict()
 
 
 @router.put("/{todo_id}")
-def update_todo(todo_id: int, payload: TodoUpdate, db: Session = Depends(get_db)):
+def update_todo(todo_id: int, payload: TodoUpdate, tareas: BackgroundTasks,
+                db: Session = Depends(get_db)):
     todo = db.get(Todo, todo_id)
     if not todo:
         raise HTTPException(404, "Tarea no encontrada")
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(todo, key, value)
     db.commit()
+    tareas.add_task(sync_aparte)
     return todo.to_dict()
 
 
 @router.post("/{todo_id}/toggle")
-def toggle_todo(todo_id: int, db: Session = Depends(get_db)):
+def toggle_todo(todo_id: int, tareas: BackgroundTasks, db: Session = Depends(get_db)):
     todo = db.get(Todo, todo_id)
     if not todo:
         raise HTTPException(404, "Tarea no encontrada")
@@ -103,16 +107,18 @@ def toggle_todo(todo_id: int, db: Session = Depends(get_db)):
         todo.status = "pendiente"
         todo.completed_at = None
     db.commit()
+    tareas.add_task(sync_aparte)
     return todo.to_dict()
 
 
 @router.delete("/{todo_id}")
-def delete_todo(todo_id: int, db: Session = Depends(get_db)):
+def delete_todo(todo_id: int, tareas: BackgroundTasks, db: Session = Depends(get_db)):
     todo = db.get(Todo, todo_id)
     if not todo:
         raise HTTPException(404, "Tarea no encontrada")
     db.delete(todo)
     db.commit()
+    tareas.add_task(sync_aparte)
     return {"deleted": True}
 
 

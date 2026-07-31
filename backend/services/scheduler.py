@@ -17,6 +17,7 @@ from backend.models import (
     get_setting,
 )
 from backend.notifications.discord import send_webhook
+from backend.services import google_sync
 from backend.services.fx import refresh_rates
 
 log = logging.getLogger("homeos.scheduler")
@@ -213,6 +214,12 @@ def refresh_fx() -> int:
         return refresh_rates(db).get("updated", 0)
 
 
+def espejar_google() -> dict:
+    """Sube a Google lo que haya cambiado. Sin cuenta conectada no hace nada."""
+    with SessionLocal() as db:
+        return google_sync.sync_seguro(db)
+
+
 async def reminder_loop() -> None:
     log.info("Scheduler de recordatorios iniciado")
     while True:
@@ -226,4 +233,12 @@ async def reminder_loop() -> None:
             await asyncio.to_thread(refresh_fx)
         except Exception:
             log.exception("Error actualizando tipos de cambio")
+        try:
+            r = await asyncio.to_thread(espejar_google)
+            movidos = r.get("creados", 0) + r.get("actualizados", 0) + r.get("borrados", 0)
+            if movidos:
+                log.info("Google Calendar: +%d ~%d -%d", r["creados"], r["actualizados"],
+                         r["borrados"])
+        except Exception:
+            log.exception("Error espejando en Google Calendar")
         await asyncio.sleep(CHECK_EVERY_S)

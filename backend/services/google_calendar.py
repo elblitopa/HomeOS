@@ -35,8 +35,15 @@ CALENDAR_KEY = "google_calendar_id"        # donde se guardan los eventos nuevos
 VISIBLE_KEY = "google_visible_calendars"   # cuales se muestran en el calendario
 
 
+# marca que HomeOS deja en los eventos que el mismo crea, para reconocerlos
+# despues (y no volver a pintarlos como si fueran eventos ajenos de Google)
+MARK_KEY = "homeos"
+
+
 class GoogleError(Exception):
-    pass
+    def __init__(self, mensaje: str, status: int | None = None):
+        super().__init__(mensaje)
+        self.status = status
 
 
 # ---------- credenciales ----------
@@ -96,8 +103,8 @@ def _api(db: Session, method: str, path: str, payload=None, params=None) -> dict
     except urllib.error.HTTPError as e:
         detalle = e.read().decode(errors="ignore")[:300]
         if e.code in (401, 403):
-            raise GoogleError("Google rechazó la sesión. Vuelve a conectar la cuenta.")
-        raise GoogleError(f"Google respondió {e.code}: {detalle}")
+            raise GoogleError("Google rechazó la sesión. Vuelve a conectar la cuenta.", e.code)
+        raise GoogleError(f"Google respondió {e.code}: {detalle}", e.code)
 
 
 # ---------- flujo OAuth ----------
@@ -179,6 +186,24 @@ def _a_google(dt: datetime, all_day: bool) -> dict:
     return {"dateTime": dt.astimezone().isoformat()}
 
 
+def rango(start: datetime, end: datetime | None, all_day: bool) -> tuple[dict, dict]:
+    """start/end tal como los quiere Google.
+
+    En los eventos de dia completo el "end" es exclusivo: un evento de un solo
+    dia termina al dia siguiente. Sin esto Google rechaza el evento porque el
+    fin no seria mayor que el inicio.
+    """
+    if all_day:
+        ultimo = (end or start).date()
+        if ultimo <= start.date():
+            ultimo = start.date()
+        return (
+            {"date": start.strftime("%Y-%m-%d")},
+            {"date": (ultimo + timedelta(days=1)).strftime("%Y-%m-%d")},
+        )
+    return _a_google(start, False), _a_google(end or start + timedelta(hours=1), False)
+
+
 # ---------- calendarios y eventos ----------
 
 def calendars(db: Session) -> list[dict]:
@@ -227,6 +252,10 @@ def _events_of(db: Session, cal: dict, desde: datetime, hasta: datetime) -> list
     for e in data.get("items", []):
         if e.get("status") == "cancelled" or "start" not in e:
             continue
+        # los espejos que puso HomeOS ya se pintan desde la base local; si se
+        # leyeran tambien de aqui, cada evento apareceria dos veces
+        if marca_homeos(e):
+            continue
         inicio, all_day = _a_local(e["start"])
         fin = _a_local(e["end"])[0] if e.get("end") else None
         eventos.append({
@@ -261,11 +290,12 @@ def list_events(db: Session, desde: datetime, hasta: datetime) -> list[dict]:
 
 def create_event(db: Session, title: str, start: datetime, end: datetime | None,
                  all_day: bool, description: str | None) -> dict:
+    inicio, fin = rango(start, end, all_day)
     cuerpo = {
         "summary": title,
         "description": description,
-        "start": _a_google(start, all_day),
-        "end": _a_google(end or start + timedelta(hours=1), all_day),
+        "start": inicio,
+        "end": fin,
     }
     return _api(db, "POST", f"/calendars/{urllib.parse.quote(calendar_id(db))}/events", cuerpo)
 
@@ -275,11 +305,12 @@ def update_event(db: Session, event_id: str, title: str, start: datetime,
                  cal_id: str | None = None) -> dict:
     """cal_id es el calendario donde vive el evento, que no tiene por que ser
     el mismo donde se guardan los nuevos."""
+    inicio, fin = rango(start, end, all_day)
     cuerpo = {
         "summary": title,
         "description": description,
-        "start": _a_google(start, all_day),
-        "end": _a_google(end or start + timedelta(hours=1), all_day),
+        "start": inicio,
+        "end": fin,
     }
     destino = urllib.parse.quote(cal_id or calendar_id(db))
     return _api(db, "PATCH", f"/calendars/{destino}/events/{urllib.parse.quote(event_id)}", cuerpo)
@@ -288,3 +319,20 @@ def update_event(db: Session, event_id: str, title: str, start: datetime,
 def delete_event(db: Session, event_id: str, cal_id: str | None = None) -> None:
     destino = urllib.parse.quote(cal_id or calendar_id(db))
     _api(db, "DELETE", f"/calendars/{destino}/events/{urllib.parse.quote(event_id)}")
+
+
+# ---------- espejo de HomeOS ----------
+
+def marca_homeos(evento: dict) -> str | None:
+    """Regresa "tipo:id" si el evento lo creo HomeOS, o None si es ajeno."""
+    props = (evento.get("extendedProperties") or {}).get("private") or {}
+    return props.get(MARK_KEY)
+
+
+def insert_raw(db: Session, cal_id: str, cuerpo: dict) -> dict:
+    return _api(db, "POST", f"/calendars/{urllib.parse.quote(cal_id)}/events", cuerpo)
+
+
+def patch_raw(db: Session, cal_id: str, event_id: str, cuerpo: dict) -> dict:
+    destino = urllib.parse.quote(cal_id)
+    return _api(db, "PATCH", f"/calendars/{destino}/events/{urllib.parse.quote(event_id)}", cuerpo)

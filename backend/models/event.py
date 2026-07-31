@@ -19,6 +19,8 @@ class Event(Base):
     end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     all_day: Mapped[bool] = mapped_column(Boolean, default=False)
     reminders: Mapped[list | None] = mapped_column(JSON, default=list)  # minutos antes de start
+    # si se espeja en Google Calendar, para que el celular avise por su cuenta
+    sync_google: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self) -> dict:
@@ -31,4 +33,5 @@ class Event(Base):
             "end": self.end.isoformat() if self.end else None,
             "all_day": self.all_day,
             "reminders": self.reminders or [],
+            "sync_google": bool(self.sync_google),
         }

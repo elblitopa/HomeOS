@@ -13,6 +13,7 @@ const EMPTY = {
   end: "",
   all_day: false,
   reminders: [30],
+  sync_google: true,
 };
 
 export default function EventFormModal({
@@ -42,6 +43,7 @@ export default function EventFormModal({
           end: toInputValue(event.end),
           all_day: event.all_day,
           reminders: event.reminders || [],
+          sync_google: event.sync_google ?? true,
           source: event.source || "homeos",
           calendar_id: event.calendar_id || null,
           calendar_name: event.calendar_name || null,
@@ -85,6 +87,7 @@ export default function EventFormModal({
           ...base,
           context_id: form.context_id ? Number(form.context_id) : null,
           reminders: form.reminders,
+          sync_google: form.sync_google,
         };
         if (event) await apiPut(`/api/events/${event.id}`, payload);
         else await apiPost("/api/events", payload);
@@ -208,6 +211,25 @@ export default function EventFormModal({
                 onChange={(r) => setForm((f) => ({ ...f, reminders: r }))}
               />
             </div>
+
+            {/* el evento se queda en HomeOS y ademas se copia a Google, para
+                que el celular avise por su cuenta con los mismos avisos */}
+            {googleReady && (
+              <label className="flex items-start gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={form.sync_google}
+                  onChange={(e) => setForm((f) => ({ ...f, sync_google: e.target.checked }))}
+                  className="mt-0.5 h-4 w-4 accent-[#2383e2]"
+                />
+                <span>
+                  También en Google Calendar
+                  <span className="block text-xs font-normal text-ink-soft">
+                    Copia el evento a Google para que te llegue la notificación al celular.
+                  </span>
+                </span>
+              </label>
+            )}
           </>
         )}
 

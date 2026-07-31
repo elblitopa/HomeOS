@@ -23,6 +23,7 @@ from backend.models.finance import (
     Subscription,
     Transaction,
 )
+from backend.models.google_link import GoogleLink
 from backend.models.note import Note
 from backend.models.routine import Routine, RoutineLog
 from backend.models.sent_reminder import SentReminder
@@ -45,6 +46,7 @@ __all__ = [
     "Event",
     "FileEntry",
     "Goal",
+    "GoogleLink",
     "Note",
     "Routine",
     "RoutineLog",

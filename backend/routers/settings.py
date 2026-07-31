@@ -18,6 +18,10 @@ WEEK_STARTS = ("monday", "sunday")
 
 KINDS_KEY = "calendar_kinds"
 
+# que se espeja en Google Calendar ademas de los eventos marcados uno por uno
+SYNC_TODOS_KEY = "google_sync_todos"
+SYNC_FINANCE_KEY = "google_sync_finance"
+
 # lo que se ve por defecto: todo menos las transacciones, que son muchas
 DEFAULT_KINDS = [
     "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota", "programado",
@@ -41,6 +45,8 @@ class SettingsPayload(BaseModel):
     week_starts_on: str | None = None
     calendar_colors: dict[str, str] | None = None
     calendar_kinds: list[str] | None = None
+    google_sync_todos: bool | None = None
+    google_sync_finance: bool | None = None
 
 
 def _colors(db: Session) -> dict:
@@ -69,6 +75,8 @@ def read_settings(db: Session = Depends(get_db)):
         "week_starts_on": get_setting(db, WEEK_START_KEY) or "monday",
         "calendar_colors": _colors(db),
         "calendar_kinds": _kinds(db),
+        "google_sync_todos": (get_setting(db, SYNC_TODOS_KEY) or "1") == "1",
+        "google_sync_finance": (get_setting(db, SYNC_FINANCE_KEY) or "1") == "1",
     }
 
 
@@ -105,6 +113,11 @@ def write_settings(payload: SettingsPayload, db: Session = Depends(get_db)):
             if k not in DEFAULT_COLORS:
                 raise HTTPException(400, f"Tipo de bloque desconocido: {k}")
         set_setting(db, KINDS_KEY, json.dumps(elegidos))
+
+    for campo, key in (("google_sync_todos", SYNC_TODOS_KEY),
+                       ("google_sync_finance", SYNC_FINANCE_KEY)):
+        if campo in data:
+            set_setting(db, key, "1" if data[campo] else "0")
 
     return read_settings(db)
 
