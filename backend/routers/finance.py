@@ -1,7 +1,7 @@
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -15,12 +15,14 @@ from backend.models import (
     Goal,
     PERIOD_MONTHS,
     RecurringPayment,
+    ScheduledTransaction,
     Subscription,
     Transaction,
 )
 from backend.services import fx
 from backend.services.dates import add_months
 from backend.services.excel import build_budget_xlsx
+from backend.services.saldos import goal_saved
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
@@ -68,18 +70,9 @@ def _account_balances(db: Session) -> dict[int, float]:
     return {k: round(v, 2) for k, v in balances.items()}
 
 
-def _goal_saved(db: Session) -> dict[int, float]:
-    """Lo ahorrado se acumula en MXN, igual que el monto objetivo de la meta."""
-    rows = (
-        db.query(
-            Transaction.to_goal_id,
-            func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
-        )
-        .filter(Transaction.type == "transferencia", Transaction.to_goal_id.isnot(None))
-        .group_by(Transaction.to_goal_id)
-        .all()
-    )
-    return {goal_id: round(total, 2) for goal_id, total in rows}
+# se movio a services/saldos.py para que el calendario pueda usarla sin
+# importar este router; aqui se conserva el nombre de siempre
+_goal_saved = goal_saved
 
 
 # ---------- cuentas ----------
@@ -95,6 +88,7 @@ class AccountPayload(BaseModel):
     color: str = "#2383e2"
     banner_path: str | None = None
     sort_order: int = 0
+    is_default: bool = False
 
 
 @router.get("/accounts")
@@ -119,6 +113,9 @@ def list_accounts(db: Session = Depends(get_db)):
 
 @router.post("/accounts", status_code=201)
 def create_account(payload: AccountPayload, db: Session = Depends(get_db)):
+    if payload.is_default:
+        # predeterminada solo puede haber una: se apagan las demas
+        db.query(Account).update({"is_default": 0})
     acc = Account(**payload.model_dump())
     db.add(acc)
     db.commit()
@@ -146,6 +143,8 @@ def update_account(acc_id: int, payload: AccountPayload, db: Session = Depends(g
     acc = db.get(Account, acc_id)
     if not acc:
         raise HTTPException(404, "Cuenta no encontrada")
+    if payload.is_default:
+        db.query(Account).filter(Account.id != acc_id).update({"is_default": 0})
     for key, value in payload.model_dump().items():
         setattr(acc, key, value)
     db.commit()
@@ -208,6 +207,7 @@ class TransactionPayload(BaseModel):
     occurred_at: datetime | None = None
     attachment_path: str | None = None
     attachment_name: str | None = None
+    via_paypal: bool = False
 
 
 @router.get("/transactions")
@@ -218,10 +218,17 @@ def list_transactions(
     context_id: int | None = None,
     today: bool = False,
     month: str | None = None,  # "2026-07"
+    # rango libre [from, to); "from" es palabra reservada de Python, de ahi el alias
+    desde: datetime | None = Query(default=None, alias="from"),
+    hasta: datetime | None = Query(default=None, alias="to"),
     limit: int = 200,
     db: Session = Depends(get_db),
 ):
     q = db.query(Transaction)
+    if desde:
+        q = q.filter(Transaction.occurred_at >= desde)
+    if hasta:
+        q = q.filter(Transaction.occurred_at < hasta)
     if type:
         q = q.filter(Transaction.type == type)
     if account_id:
@@ -232,7 +239,9 @@ def list_transactions(
         q = q.filter(Transaction.context_id == context_id)
     if today:
         start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        q = q.filter(Transaction.occurred_at >= start)
+        # acotado por arriba: "hoy" es el dia de hoy, no "de hoy en adelante"
+        q = q.filter(Transaction.occurred_at >= start,
+                     Transaction.occurred_at < start + timedelta(days=1))
     if month:
         try:
             y, m = map(int, month.split("-"))
@@ -343,10 +352,11 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     return {"deleted": True}
 
 
-# ---------- pagos recurrentes (deudas) ----------
+# ---------- pagos recurrentes (deudas y cobros a plazos) ----------
 
 class RecurringPayload(BaseModel):
     name: str = Field(min_length=1)
+    type: str = "egreso"  # egreso = deuda que pagas | ingreso = te abonan
     total_amount: float = Field(gt=0)
     installment_amount: float = Field(gt=0)
     installments_total: int = Field(gt=0)
@@ -377,6 +387,34 @@ def _charge_amount(item_currency: str, account: Account | None, amount: float, d
     item_rate = fx.current_rate(db, item_currency)
     acc_rate = fx.current_rate(db, acc_currency) or 1.0
     return round(amount * item_rate / acc_rate, 2), acc_rate
+
+
+class CobroPayload(BaseModel):
+    """Lo que de verdad se cobro, cuando no coincide con la conversion nuestra.
+
+    PayPal convierte con su propio tipo de cambio —en la practica cerca de un
+    6% arriba del mercado— y no lo desglosa como comision: lo mete dentro de la
+    tasa. Como el recibo si trae el monto exacto, aqui se captura tal cual en
+    vez de estimarlo.
+    """
+
+    # monto ya convertido, en la divisa de la cuenta que paga
+    charged_amount: float | None = Field(default=None, gt=0)
+    via_paypal: bool = False
+
+
+def _monto_final(datos: "CobroPayload | None", item_currency: str,
+                 account: Account | None, amount: float, db: Session):
+    """El monto que se le carga a la cuenta y con que tipo de cambio.
+
+    Si viene charged_amount se respeta tal cual (es el del recibo) y el tipo
+    de cambio se deduce; si no, se convierte con el del mercado como siempre.
+    """
+    if datos and datos.charged_amount:
+        acc_rate = fx.current_rate(db, account.currency if account else BASE_CURRENCY) or 1.0
+        return round(datos.charged_amount, 2), acc_rate, bool(datos.via_paypal)
+    monto, acc_rate = _charge_amount(item_currency, account, amount, db)
+    return monto, acc_rate, bool(datos.via_paypal) if datos else False
 
 
 @router.get("/recurring")
@@ -410,29 +448,39 @@ def update_recurring(item_id: int, payload: RecurringPayload, db: Session = Depe
 
 
 @router.post("/recurring/{item_id}/pay")
-def pay_recurring(item_id: int, db: Session = Depends(get_db)):
-    """Registra una cuota: crea el egreso, avanza contador y siguiente pago."""
+def pay_recurring(item_id: int, payload: CobroPayload | None = None,
+                  db: Session = Depends(get_db)):
+    """Registra una cuota: crea el movimiento, avanza contador y siguiente fecha.
+
+    Segun el tipo, el movimiento es un egreso (una deuda que pagas) o un
+    ingreso (dinero que te abonan a plazos).
+    """
     item = db.get(RecurringPayment, item_id)
     if not item:
         raise HTTPException(404, "Pago recurrente no encontrado")
+    es_ingreso = (item.type or "egreso") == "ingreso"
     if item.installments_paid >= item.installments_total:
-        raise HTTPException(409, "Esta deuda ya está liquidada")
+        raise HTTPException(409, "Este cobro ya terminó" if es_ingreso else "Esta deuda ya está liquidada")
     if item.account_id:
         account = db.get(Account, item.account_id)
         currency = item.currency or BASE_CURRENCY
-        amount, acc_rate = _charge_amount(currency, account, item.installment_amount, db)
-        description = f"Pago {item.installments_paid + 1}/{item.installments_total}: {item.name}"
+        amount, acc_rate, paypal = _monto_final(
+            payload, currency, account, item.installment_amount, db
+        )
+        etiqueta = "Cobro" if es_ingreso else "Pago"
+        description = f"{etiqueta} {item.installments_paid + 1}/{item.installments_total}: {item.name}"
         if account and currency != account.currency:
             description += f" ({item.installment_amount:g} {currency})"
         db.add(
             Transaction(
                 description=description,
                 amount=amount,
-                type="egreso",
+                type="ingreso" if es_ingreso else "egreso",
                 category_id=item.category_id,
                 account_id=item.account_id,
                 occurred_at=datetime.now(),
                 fx_rate=acc_rate,
+                via_paypal=paypal,
             )
         )
     item.installments_paid += 1
@@ -496,7 +544,8 @@ def update_subscription(item_id: int, payload: SubscriptionPayload, db: Session 
 
 
 @router.post("/subscriptions/{item_id}/pay")
-def pay_subscription(item_id: int, db: Session = Depends(get_db)):
+def pay_subscription(item_id: int, payload: CobroPayload | None = None,
+                     db: Session = Depends(get_db)):
     """Registra el cobro del periodo: crea el egreso y avanza el siguiente pago."""
     item = db.get(Subscription, item_id)
     if not item:
@@ -504,7 +553,7 @@ def pay_subscription(item_id: int, db: Session = Depends(get_db)):
     if item.account_id:
         account = db.get(Account, item.account_id)
         currency = item.currency or BASE_CURRENCY
-        amount, acc_rate = _charge_amount(currency, account, item.amount, db)
+        amount, acc_rate, paypal = _monto_final(payload, currency, account, item.amount, db)
         description = f"Suscripción: {item.name}"
         if account and currency != account.currency:
             description += f" ({item.amount:g} {currency})"
@@ -517,6 +566,7 @@ def pay_subscription(item_id: int, db: Session = Depends(get_db)):
                 account_id=item.account_id,
                 occurred_at=datetime.now(),
                 fx_rate=acc_rate,
+                via_paypal=paypal,
             )
         )
     if item.next_due:
@@ -533,6 +583,249 @@ def delete_subscription(item_id: int, db: Session = Depends(get_db)):
     db.delete(item)
     db.commit()
     return {"deleted": True}
+
+
+# ---------- programados ----------
+
+class ScheduledPayload(BaseModel):
+    description: str = Field(min_length=1)
+    amount: float = Field(gt=0)
+    currency: str = BASE_CURRENCY
+    type: str
+    category_id: int | None = None
+    account_id: int
+    to_account_id: int | None = None
+    to_goal_id: int | None = None
+    context_id: int | None = None
+    scheduled_for: datetime
+    attachment_path: str | None = None
+    attachment_name: str | None = None
+
+
+class ConfirmPayload(BaseModel):
+    """Todo opcional: por defecto se concreta con lo que se programo."""
+
+    amount: float | None = Field(default=None, gt=0)
+    occurred_at: datetime | None = None
+    attachment_path: str | None = None
+    attachment_name: str | None = None
+    # lo que de verdad se cargo a la cuenta, si el tipo de cambio fue otro
+    charged_amount: float | None = Field(default=None, gt=0)
+    via_paypal: bool = False
+
+
+class PostponePayload(BaseModel):
+    scheduled_for: datetime
+    note: str | None = None
+
+
+class NotePayload(BaseModel):
+    note: str | None = None
+
+
+def _validate_scheduled(payload: ScheduledPayload, db: Session) -> None:
+    if payload.type not in ("ingreso", "egreso", "transferencia"):
+        raise HTTPException(400, "Tipo inválido")
+    if not db.get(Account, payload.account_id):
+        raise HTTPException(400, "La cuenta no existe")
+    if payload.type == "transferencia":
+        if not payload.to_account_id and not payload.to_goal_id:
+            raise HTTPException(400, "La transferencia necesita cuenta o meta destino")
+        if payload.to_account_id == payload.account_id:
+            raise HTTPException(400, "No puedes transferir a la misma cuenta")
+
+
+def _solo_pendiente(item: ScheduledTransaction, accion: str) -> None:
+    if item.status != "pendiente":
+        estado = "ya se concretó" if item.status == "concretado" else "está cancelado"
+        raise HTTPException(409, f"No se puede {accion}: el programado {estado}.")
+
+
+@router.get("/scheduled")
+def list_scheduled(
+    status: str = "pendiente",
+    type: str | None = None,
+    account_id: int | None = None,
+    context_id: int | None = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+):
+    """status=all trae también el historial de concretados y cancelados."""
+    q = db.query(ScheduledTransaction)
+    if status != "all":
+        q = q.filter(ScheduledTransaction.status == status)
+    if type:
+        q = q.filter(ScheduledTransaction.type == type)
+    if account_id:
+        q = q.filter(ScheduledTransaction.account_id == account_id)
+    if context_id:
+        q = q.filter(ScheduledTransaction.context_id == context_id)
+    # los pendientes se leen de lo mas proximo a lo mas lejano; el historial al reves
+    orden = (
+        ScheduledTransaction.scheduled_for.desc()
+        if status in ("concretado", "cancelado")
+        else ScheduledTransaction.scheduled_for.asc()
+    )
+    items = q.order_by(orden).limit(min(limit, 1000)).all()
+    return [i.to_dict(fx.current_rate(db, i.currency)) for i in items]
+
+
+@router.post("/scheduled", status_code=201)
+def create_scheduled(payload: ScheduledPayload, db: Session = Depends(get_db)):
+    _validate_scheduled(payload, db)
+    data = payload.model_dump()
+    data["currency"] = _check_currency(data.get("currency"), db)
+    item = ScheduledTransaction(**data)
+    db.add(item)
+    db.commit()
+    return item.to_dict(fx.current_rate(db, item.currency))
+
+
+@router.put("/scheduled/{item_id}")
+def update_scheduled(item_id: int, payload: ScheduledPayload, db: Session = Depends(get_db)):
+    item = db.get(ScheduledTransaction, item_id)
+    if not item:
+        raise HTTPException(404, "Programado no encontrado")
+    _solo_pendiente(item, "editar")
+    _validate_scheduled(payload, db)
+    data = payload.model_dump()
+    data["currency"] = _check_currency(data.get("currency"), db)
+    for key, value in data.items():
+        setattr(item, key, value)
+    db.commit()
+    return item.to_dict(fx.current_rate(db, item.currency))
+
+
+@router.post("/scheduled/{item_id}/confirm")
+def confirm_scheduled(item_id: int, payload: ConfirmPayload | None = None,
+                      db: Session = Depends(get_db)):
+    """Lo programado ocurrio: nace la Transaction real y la fila queda cerrada."""
+    item = db.get(ScheduledTransaction, item_id)
+    if not item:
+        raise HTTPException(404, "Programado no encontrado")
+    _solo_pendiente(item, "concretar")
+    datos = payload or ConfirmPayload()
+
+    # revalidar en vez de copiar a ciegas: los destinos son ondelete=SET NULL,
+    # asi que pudieron quedar vacios despues de programarlo
+    account = db.get(Account, item.account_id)
+    if not account:
+        raise HTTPException(400, "La cuenta de este programado ya no existe.")
+    if item.type == "transferencia":
+        if item.to_account_id and not db.get(Account, item.to_account_id):
+            raise HTTPException(400, "La cuenta destino ya no existe. Edítalo antes de concretarlo.")
+        if item.to_goal_id and not db.get(Goal, item.to_goal_id):
+            raise HTTPException(400, "La meta destino ya no existe. Edítalo antes de concretarlo.")
+        if not item.to_account_id and not item.to_goal_id:
+            raise HTTPException(400, "Este programado se quedó sin destino. Edítalo antes de concretarlo.")
+
+    ahora = datetime.now()
+    # si se confirma tarde, el dinero se movio el dia previsto: anclarlo ahi
+    # mantiene honestos los resumenes por mes
+    cuando = datos.occurred_at or (item.scheduled_for if item.scheduled_for <= ahora else ahora)
+    if cuando > ahora:
+        raise HTTPException(
+            400,
+            "No se puede concretar con fecha futura: eso alteraría los saldos de hoy. "
+            "Si aún no ocurre, aplázalo.",
+        )
+
+    monto_pactado = datos.amount if datos.amount is not None else item.amount
+    # el tipo de cambio se congela AHORA, no cuando se programo. Ojo: si se
+    # confirma tarde se congela la tasa de hoy, porque exchange_rates solo
+    # guarda el valor vigente y no el historico. Si el cobro paso por PayPal,
+    # el monto real viene en charged_amount y manda sobre la conversion.
+    monto, acc_rate, paypal = _monto_final(
+        CobroPayload(charged_amount=datos.charged_amount, via_paypal=datos.via_paypal),
+        item.currency or BASE_CURRENCY, account, monto_pactado, db,
+    )
+
+    tx = Transaction(
+        description=item.description,
+        amount=monto,
+        type=item.type,
+        category_id=item.category_id,
+        account_id=item.account_id,
+        to_account_id=item.to_account_id,
+        to_goal_id=item.to_goal_id,
+        context_id=item.context_id,
+        occurred_at=cuando,
+        fx_rate=acc_rate,
+        via_paypal=paypal,
+        attachment_path=datos.attachment_path or item.attachment_path,
+        attachment_name=datos.attachment_name or item.attachment_name,
+    )
+    db.add(tx)
+    db.flush()  # necesitamos el id antes de cerrar la fila programada
+
+    item.status = "concretado"
+    item.transaction_id = tx.id
+    item.actual_amount = monto_pactado
+    item.resolved_at = ahora
+    db.commit()
+    return {"scheduled": item.to_dict(fx.current_rate(db, item.currency)), "transaction": tx.to_dict()}
+
+
+@router.post("/scheduled/{item_id}/postpone")
+def postpone_scheduled(item_id: int, payload: PostponePayload, db: Session = Depends(get_db)):
+    item = db.get(ScheduledTransaction, item_id)
+    if not item:
+        raise HTTPException(404, "Programado no encontrado")
+    _solo_pendiente(item, "aplazar")
+    if item.original_scheduled_for is None:
+        item.original_scheduled_for = item.scheduled_for
+    item.scheduled_for = payload.scheduled_for
+    item.postponed_count = (item.postponed_count or 0) + 1
+    if payload.note:
+        item.note = payload.note
+    db.commit()
+    return item.to_dict(fx.current_rate(db, item.currency))
+
+
+@router.post("/scheduled/{item_id}/cancel")
+def cancel_scheduled(item_id: int, payload: NotePayload | None = None,
+                     db: Session = Depends(get_db)):
+    """No se concreto. No se borra: queda en el historial."""
+    item = db.get(ScheduledTransaction, item_id)
+    if not item:
+        raise HTTPException(404, "Programado no encontrado")
+    if item.status == "concretado":
+        raise HTTPException(409, "Ya se concretó. Borra la transacción si fue un error.")
+    item.status = "cancelado"
+    item.resolved_at = datetime.now()
+    if payload and payload.note:
+        item.note = payload.note
+    db.commit()
+    return item.to_dict(fx.current_rate(db, item.currency))
+
+
+@router.post("/scheduled/{item_id}/reopen")
+def reopen_scheduled(item_id: int, db: Session = Depends(get_db)):
+    """Vuelve a pendiente. Tambien rescata las filas que quedaron marcadas como
+    concretadas pero cuya transaccion se borro a mano."""
+    item = db.get(ScheduledTransaction, item_id)
+    if not item:
+        raise HTTPException(404, "Programado no encontrado")
+    if item.status == "concretado" and item.transaction_id is not None:
+        raise HTTPException(409, "Primero borra la transacción que generó.")
+    item.status = "pendiente"
+    item.transaction_id = None
+    item.actual_amount = None
+    item.resolved_at = None
+    db.commit()
+    return item.to_dict(fx.current_rate(db, item.currency))
+
+
+@router.delete("/scheduled/{item_id}")
+def delete_scheduled(item_id: int, db: Session = Depends(get_db)):
+    """Borra el plan, nunca la transaccion real que haya generado."""
+    item = db.get(ScheduledTransaction, item_id)
+    if not item:
+        raise HTTPException(404, "Programado no encontrado")
+    tenia_tx = item.transaction_id is not None
+    db.delete(item)
+    db.commit()
+    return {"deleted": True, "transaction_kept": tenia_tx}
 
 
 # ---------- divisas ----------
@@ -674,9 +967,20 @@ def _budget_data(db: Session) -> dict:
             "note": None,
         })
 
+    # los recurrentes de tipo ingreso no son un compromiso mensual sino lo
+    # contrario: se suman al ingreso esperado de su cuenta
+    ingresos_recurrentes: dict[int, float] = {}
+
     for r in db.query(RecurringPayment).order_by(RecurringPayment.name).all():
         liquidada = r.installments_paid >= r.installments_total
         per_month = 0.0 if liquidada else r.installment_amount / PERIOD_MONTHS.get(r.frequency, 1)
+        if (r.type or "egreso") == "ingreso":
+            # sin cuenta no hay donde sumarlo, igual que /pay no crea movimiento
+            if r.account_id and not liquidada:
+                ingresos_recurrentes[r.account_id] = (
+                    ingresos_recurrentes.get(r.account_id, 0.0) + mxn(per_month, r.currency)
+                )
+            continue
         commitments.append({
             "kind": "Pago recurrente",
             "name": r.name,
@@ -733,7 +1037,12 @@ def _budget_data(db: Session) -> dict:
             "account": a.name,
             "currency": a.currency,
             "expected": a.expected_income or 0.0,
-            "expected_mxn": mxn(a.expected_income or 0.0, a.currency),
+            # lo capturado a mano en la cuenta mas lo que aportan los cobros
+            # recurrentes que caen en ella
+            "expected_mxn": round(
+                mxn(a.expected_income or 0.0, a.currency) + ingresos_recurrentes.get(a.id, 0.0), 2
+            ),
+            "recurring_mxn": round(ingresos_recurrentes.get(a.id, 0.0), 2),
             "actual_mxn": round(real.get(a.id, 0.0), 2),
         }
         for a in sorted(accounts.values(), key=lambda x: (x.sort_order, x.name))
@@ -823,12 +1132,26 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
     ).filter(
         Transaction.type.in_(["ingreso", "egreso"]),
         Transaction.occurred_at >= start_today,
+        # con cota superior: sin ella, cualquier movimiento con fecha futura
+        # se contaria como si hubiera pasado hoy
+        Transaction.occurred_at < start_today + timedelta(days=1),
     )
     if context_id:
         qt = qt.filter(Transaction.context_id == context_id)
     today_totals = {"ingresos": 0.0, "egresos": 0.0}
     for tx_type, total in qt.group_by(Transaction.type):
         today_totals["ingresos" if tx_type == "ingreso" else "egresos"] = total
+
+    # para que el Resumen sepa si hay algo que atender sin pedir otra ruta
+    pendientes = db.query(ScheduledTransaction).filter(
+        ScheduledTransaction.status == "pendiente"
+    ).all()
+    hoy = datetime.now().date()
+    programados = {
+        "pendientes": len(pendientes),
+        "vencidos": sum(1 for p in pendientes if p.scheduled_for.date() < hoy),
+        "hoy": sum(1 for p in pendientes if p.scheduled_for.date() == hoy),
+    }
 
     return {
         "by_category": {
@@ -843,4 +1166,5 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
             for k, v in sorted(by_month.items(), reverse=True)
         },
         "today": today_totals,
+        "programados": programados,
     }

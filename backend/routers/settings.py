@@ -19,7 +19,9 @@ WEEK_STARTS = ("monday", "sunday")
 KINDS_KEY = "calendar_kinds"
 
 # lo que se ve por defecto: todo menos las transacciones, que son muchas
-DEFAULT_KINDS = ["evento", "google", "tarea", "suscripcion", "pago", "meta", "nota"]
+DEFAULT_KINDS = [
+    "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota", "programado",
+]
 
 DEFAULT_COLORS = {
     "evento": "#2383e2",
@@ -29,6 +31,7 @@ DEFAULT_COLORS = {
     "pago": "#e8590c",
     "meta": "#f59e0b",
     "nota": "#6b6b70",
+    "programado": "#0b7285",
     "transaccion": "#3b5bdb",
 }
 

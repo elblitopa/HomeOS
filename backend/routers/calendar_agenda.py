@@ -18,22 +18,46 @@ from backend.models import (
     Note,
     PERIOD_MONTHS,
     RecurringPayment,
+    ScheduledTransaction,
     Subscription,
     Todo,
     Transaction,
 )
 from backend.services import google_calendar as gcal
-from backend.services.dates import occurrences
+from backend.services.dates import add_months, occurrences
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
 KINDS = [
-    "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota", "transaccion",
+    "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota",
+    "programado", "transaccion",
 ]
 
 
 def _money(amount: float, currency: str = BASE_CURRENCY) -> str:
     return f"${amount:,.2f} {currency}"
+
+
+def _cuota_en(r: RecurringPayment, cuando: datetime | None) -> int | None:
+    """Numero de cuota que cae en esa fecha, contando desde next_due.
+
+    No sirve el indice de la lista que devuelve occurrences(): esa lista ya
+    viene recortada al rango visible, asi que al navegar a un mes lejano el
+    indice arranca de cero otra vez y el numero de cuota se queda clavado.
+    Regresa None si la fecha ya no pertenece a la serie (se edito next_due).
+    """
+    if not r.next_due or not cuando:
+        return None
+    meses = PERIOD_MONTHS.get(r.frequency, 1)
+    if meses <= 0:
+        return None
+    cursor, saltos = r.next_due, 0
+    while cursor.date() < cuando.date() and saltos < 500:
+        cursor = add_months(cursor, meses)
+        saltos += 1
+    if cursor.date() != cuando.date():
+        return None
+    return r.installments_paid + saltos + 1
 
 
 @router.get("/agenda")
@@ -101,13 +125,16 @@ def agenda(
                 continue
             months = PERIOD_MONTHS.get(r.frequency, 1)
             fechas = occurrences(r.next_due, months, desde, hasta, limit=faltan)
-            for index, when in enumerate(fechas):
-                cuota = r.installments_paid + index + 1
-                if cuota > r.installments_total:
+            cobro = (r.type or "egreso") == "ingreso"
+            for when in fechas:
+                cuota = _cuota_en(r, when)
+                if cuota is None or cuota > r.installments_total:
                     break
                 add("pago", r.id, r.name, when,
+                    f"{'+' if cobro else '−'}"
                     f"{_money(r.installment_amount, r.currency or BASE_CURRENCY)}"
-                    f" · cuota {cuota}/{r.installments_total}")
+                    f" · {'abono' if cobro else 'cuota'} {cuota}/{r.installments_total}",
+                    None, {"type": "ingreso" if cobro else "egreso"})
 
     if "meta" in wanted:
         for g in db.query(Goal).filter(
@@ -119,6 +146,20 @@ def agenda(
         for n in db.query(Note).filter(Note.created_at >= desde, Note.created_at < hasta):
             add("nota", n.id, n.title, n.created_at,
                 "nota de voz" if n.audio_path else None, n.context_id)
+
+    if "programado" in wanted:
+        # solo los que siguen pendientes: los concretados ya se ven como
+        # transaccion y los cancelados no van a pasar
+        q = db.query(ScheduledTransaction).filter(
+            ScheduledTransaction.status == "pendiente",
+            ScheduledTransaction.scheduled_for >= desde,
+            ScheduledTransaction.scheduled_for < hasta,
+        )
+        for p in q:
+            signo = "+" if p.type == "ingreso" else "−"
+            add("programado", p.id, p.description, p.scheduled_for,
+                f"{signo}{_money(p.amount, p.currency or BASE_CURRENCY)} · por confirmar",
+                p.context_id, {"type": p.type})
 
     if "transaccion" in wanted:
         cuentas = {a.id: a for a in db.query(Account).all()}

@@ -4,16 +4,28 @@ import useCardSort from "../../hooks/useCardSort.js";
 import Button from "../../components/ui/Button.jsx";
 import Carousel from "../../components/ui/Carousel.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
+import { COLOR_TIPO, IconoTipo } from "../../components/ui/TipoBadge.jsx";
 import { BASE_CURRENCY, fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
 import {
   AccountModal,
   GoalModal,
   RecurringModal,
   SubscriptionModal,
+  CobrarModal,
+  ConcretarModal,
   TransactionModal,
 } from "./FinanceModals.jsx";
 
 const periodLabel = (v) => PERIODS.find((p) => p.value === v)?.label || v;
+
+/** El borde y el fondo avisan qué tan cerca está el cobro, para verlo de
+ *  reojo sin leer: naranja en la última semana, rojo el mismo día o vencido. */
+function urgencia(diasRestantes) {
+  if (diasRestantes === null || diasRestantes === undefined) return "border-glass-border bg-surface/50";
+  if (diasRestantes <= 0) return "border-err/40 bg-err/10";
+  if (diasRestantes <= 7) return "border-amber-500/40 bg-amber-500/10";
+  return "border-glass-border bg-surface/50";
+}
 
 function ProgressBar({ value, color = "#2383e2" }) {
   return (
@@ -32,6 +44,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
   const [subs, setSubs] = useState([]);
   const [rates, setRates] = useState([]);
   const [today, setToday] = useState({ ingresos: 0, egresos: 0 });
+  const [programados, setProgramados] = useState([]);
   const [modal, setModal] = useState(null); // {type, data?}
 
   useEffect(() => {
@@ -40,34 +53,22 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
     apiGet("/api/finance/subscriptions").then(setSubs).catch(() => {});
     apiGet("/api/finance/rates").then(setRates).catch(() => {});
     apiGet("/api/finance/summary").then((s) => setToday(s.today)).catch(() => {});
+    apiGet("/api/finance/scheduled?status=pendiente").then(setProgramados).catch(() => {});
   }, [version]);
+
+  // en el resumen solo asoman los que ya tocan; el resto vive en su pestaña
+  const porAtender = programados.filter((p) => p.overdue || p.due_today);
 
   const close = () => setModal(null);
   const saved = () => {
     close();
     reload();
   };
-
-  // si el cobro es en otra divisa, avisar a cuánto se va a convertir hoy
-  const confirmarCobro = (label, item, monto, montoMxn) => {
-    const base = `¿Registrar ${label} de ${fmtMoney(monto, item.currency)} de "${item.name}"?`;
-    return item.currency && item.currency !== BASE_CURRENCY
-      ? `${base}\n\nAl tipo de cambio de hoy son ${fmtMoney(montoMxn)} MXN.`
-      : base;
-  };
-
-  const payRecurring = async (item) => {
-    const msg = confirmarCobro("pago", item, item.installment_amount, item.installment_amount_mxn);
-    if (!confirm(msg)) return;
-    await apiPost(`/api/finance/recurring/${item.id}/pay`);
-    reload();
-  };
-
-  const paySub = async (item) => {
-    if (!confirm(confirmarCobro("cobro", item, item.amount, item.amount_mxn))) return;
-    await apiPost(`/api/finance/subscriptions/${item.id}/pay`);
-    reload();
-  };
+  // el registro pasa por un modal: si el cargo viene en otra divisa hay que
+  // poder decir cuánto cobraron de verdad, porque PayPal no usa el tipo de
+  // cambio del mercado sino el suyo, con su margen ya adentro
+  const payRecurring = (item) => setModal({ type: "cobrar", data: item, kind: "pago" });
+  const paySub = (item) => setModal({ type: "cobrar", data: item, kind: "suscripcion" });
 
   // orden de las tarjetas: viene del servidor y se puede reacomodar arrastrando
   const [order, setOrder] = useState([]);
@@ -113,13 +114,20 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
   const totalMxn = accounts.reduce((sum, a) => sum + (a.balance_mxn ?? a.balance ?? 0), 0);
   const hasForeign = accounts.some((a) => a.currency !== BASE_CURRENCY);
 
+  // los tres movimientos van en su propia fila, solo con el símbolo y el color
+  // del tipo: son los botones de todos los días y así se pican sin leer. Usan
+  // el mismo icono que el badge de las filas para que sea el mismo idioma.
+  const movimientos = [
+    { tipo: "ingreso", titulo: "Nuevo ingreso", hover: "hover:bg-ok/25" },
+    { tipo: "transferencia", titulo: "Nueva transferencia", hover: "hover:bg-accent/25" },
+    { tipo: "egreso", titulo: "Nuevo egreso", hover: "hover:bg-err/25" },
+  ];
+
   const quick = [
-    { label: "＋ Ingreso", action: () => setModal({ type: "tx", txType: "ingreso" }) },
-    { label: "− Egreso", action: () => setModal({ type: "tx", txType: "egreso" }) },
-    { label: "⇄ Transferencia", action: () => setModal({ type: "tx", txType: "transferencia" }) },
+    { label: "🗓️ Programado", action: () => setModal({ type: "tx", programado: true }) },
     { label: "🏦 Cuenta", action: () => setModal({ type: "account" }) },
     { label: "🎯 Meta", action: () => setModal({ type: "goal" }) },
-    { label: "📆 Deuda", action: () => setModal({ type: "recurring" }) },
+    { label: "📆 Recurrentes", action: () => setModal({ type: "recurring" }) },
     { label: "🔁 Suscripción", action: () => setModal({ type: "sub" }) },
   ];
 
@@ -130,6 +138,21 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
       {/* navegación rápida: hasta arriba en móvil, columna derecha en escritorio */}
       <GlassCard className="p-4 lg:col-start-2 lg:row-start-1 lg:self-start">
         <h2 className="mb-2 text-sm font-semibold text-ink-soft">Navegación rápida</h2>
+        <div className="mb-2 grid grid-cols-3 gap-2">
+          {movimientos.map((m) => (
+            <button
+              key={m.tipo}
+              onClick={() => setModal({ type: "tx", txType: m.tipo })}
+              title={m.titulo}
+              aria-label={m.titulo}
+              className={`flex items-center justify-center rounded-xl border py-3 backdrop-blur transition ${
+                COLOR_TIPO[m.tipo]
+              } ${m.hover}`}
+            >
+              <IconoTipo type={m.tipo} className="h-6 w-6" />
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {quick.map((q) => (
             <button
@@ -212,6 +235,11 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                             <span className="flex items-center gap-2 font-medium">
                               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: a.color }} />
                               {a.name}
+                              {a.is_default && (
+                                <span title="Cuenta predeterminada" className="text-xs">
+                                  ⭐
+                                </span>
+                              )}
                             </span>
                             <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] uppercase text-ink-soft">
                               {section.key === "negocio" ? kindOf(a.kind).label : a.scope}
@@ -242,6 +270,51 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
       {/* min-w-0: sin esto el carrusel de metas estira la columna del grid
           hasta el ancho de todas sus tarjetas y desborda la pantalla */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-2 lg:self-start">
+        {/* solo aparece cuando hay algo que atender hoy o vencido */}
+        {porAtender.length > 0 && (
+          <GlassCard className="p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink-soft">⏳ Programados</h2>
+              <span className="text-xs text-ink-soft">
+                {porAtender.length} por confirmar
+              </span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {porAtender.slice(0, 4).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-xl border border-glass-border bg-surface/50 px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{p.description}</p>
+                    <p className={`text-xs ${p.overdue ? "font-medium text-err" : "text-ink-soft"}`}>
+                      {p.overdue
+                        ? `venció hace ${Math.abs(p.days_left)} d`
+                        : "es hoy"}{" "}
+                      ·{" "}
+                      <span className={p.type === "ingreso" ? "text-ok" : "text-err"}>
+                        {p.type === "ingreso" ? "+" : "−"}
+                        {fmtMoney(p.amount, p.currency)}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    className="shrink-0 rounded-lg bg-ok/10 px-2 py-1 text-xs font-medium text-ok transition hover:bg-ok/20"
+                    onClick={() => setModal({ type: "concretar", data: p })}
+                  >
+                    ✓
+                  </button>
+                </div>
+              ))}
+              {porAtender.length > 4 && (
+                <p className="text-xs text-ink-soft">
+                  y {porAtender.length - 4} más en la pestaña Programados.
+                </p>
+              )}
+            </div>
+          </GlassCard>
+        )}
+
         <GlassCard className="p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink-soft">🎯 Metas</h2>
@@ -303,44 +376,65 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
             </button>
           </div>
           <div className="flex flex-col gap-3">
-            {recurring.length === 0 && <p className="text-xs text-ink-soft">Sin deudas registradas 🎉</p>}
-            {recurring.map((r) => (
-              <div key={r.id} className="rounded-xl border border-glass-border bg-surface/50 p-3">
-                <div className="flex items-baseline justify-between">
-                  <p className="cursor-pointer text-sm font-medium" onClick={() => setModal({ type: "recurring", data: r })}>
-                    {r.name}
-                  </p>
-                  <span className="text-xs text-ink-soft">
-                    {r.installments_paid}/{r.installments_total}
-                  </span>
-                </div>
-                <ProgressBar value={r.progress} color={r.done ? "#2f9e44" : "#2383e2"} />
-                <p className="mt-1 text-xs text-ink-soft">
-                  Pagado {fmtMoney(r.paid_amount, r.currency)} · Pendiente{" "}
-                  {fmtMoney(r.pending_amount, r.currency)}
-                </p>
-                {r.currency !== BASE_CURRENCY && (
-                  <p className="text-xs font-medium text-accent">
-                    Cuota {fmtMoney(r.installment_amount, r.currency)} ≈{" "}
-                    {fmtMoney(r.installment_amount_mxn)} MXN
-                  </p>
-                )}
-                {!r.done && (
-                  <div className="mt-1.5 flex items-center justify-between">
-                    <p className="text-xs text-ink-soft">
-                      {r.next_due
-                        ? r.days_left <= 0
-                          ? "⚠️ vence hoy"
-                          : `siguiente en ${r.days_left} día${r.days_left > 1 ? "s" : ""}`
-                        : "sin fecha"}
+            {recurring.length === 0 && (
+              <p className="text-xs text-ink-soft">Sin deudas ni cobros a plazos 🎉</p>
+            )}
+            {recurring.map((r) => {
+              const cobro = r.type === "ingreso";
+              return (
+                <div
+                  key={r.id}
+                  className={`rounded-xl border p-3 backdrop-blur transition ${
+                    r.done ? "border-glass-border bg-surface/50" : urgencia(r.next_due ? r.days_left : null)
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between">
+                    <p className="cursor-pointer text-sm font-medium" onClick={() => setModal({ type: "recurring", data: r })}>
+                      {cobro && <span className="mr-1">📥</span>}
+                      {r.name}
                     </p>
-                    <button className="text-xs font-medium text-accent" onClick={() => payRecurring(r)}>
-                      Registrar pago
-                    </button>
+                    <span className="text-xs text-ink-soft">
+                      {r.installments_paid}/{r.installments_total}
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
+                  <ProgressBar value={r.progress} color={r.done ? "#2f9e44" : cobro ? "#2f9e44" : "#2383e2"} />
+                  <p className="mt-1 text-xs text-ink-soft">
+                    {cobro ? "Recibido" : "Pagado"} {fmtMoney(r.paid_amount, r.currency)} · Falta{" "}
+                    {fmtMoney(r.pending_amount, r.currency)}
+                  </p>
+                  {r.currency !== BASE_CURRENCY && (
+                    <p className="text-xs font-medium text-accent">
+                      {cobro ? "Abono" : "Cuota"} {fmtMoney(r.installment_amount, r.currency)} ≈{" "}
+                      {fmtMoney(r.installment_amount_mxn)} MXN
+                    </p>
+                  )}
+                  {!r.done && (
+                    <div className="mt-1.5 flex items-center justify-between">
+                      <p className="text-xs text-ink-soft">
+                        {r.next_due
+                          ? r.days_left < 0
+                            ? `⚠️ atrasado ${Math.abs(r.days_left)} d`
+                            : r.days_left === 0
+                              ? "⚠️ es hoy"
+                              : `siguiente en ${r.days_left} día${r.days_left > 1 ? "s" : ""}`
+                          : "sin fecha"}
+                      </p>
+                      <button
+                        className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold backdrop-blur transition ${
+                          cobro
+                            ? "border-ok/30 bg-ok/15 text-ok hover:bg-ok/25"
+                            : "border-accent/30 bg-accent/15 text-accent hover:bg-accent/25"
+                        }`}
+                        onClick={() => payRecurring(r)}
+                        title={`Registrar ${cobro ? "el abono" : "el pago"} de ${r.name}`}
+                      >
+                        {cobro ? "Registrar abono" : "Registrar pago"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </GlassCard>
 
@@ -354,13 +448,24 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
           <div className="flex flex-col gap-2">
             {subs.length === 0 && <p className="text-xs text-ink-soft">Sin suscripciones.</p>}
             {subs.map((s) => (
-              <div key={s.id} className="flex items-center justify-between rounded-xl border border-glass-border bg-surface/50 p-2.5">
-                <div className="cursor-pointer" onClick={() => setModal({ type: "sub", data: s })}>
-                  <p className="text-sm font-medium">{s.name}</p>
+              <div
+                key={s.id}
+                className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 backdrop-blur transition ${urgencia(
+                  s.next_due ? s.days_left : null
+                )}`}
+              >
+                <div className="min-w-0 cursor-pointer" onClick={() => setModal({ type: "sub", data: s })}>
+                  <p className="truncate text-sm font-medium">{s.name}</p>
                   <p className="text-xs text-ink-soft">
                     {fmtMoney(s.amount, s.currency)} · {periodLabel(s.period)}
                     {s.next_due &&
-                      ` · ${s.days_left <= 0 ? "⚠️ hoy" : `en ${s.days_left} día${s.days_left > 1 ? "s" : ""}`}`}
+                      ` · ${
+                        s.days_left < 0
+                          ? `⚠️ atrasado ${Math.abs(s.days_left)} d`
+                          : s.days_left === 0
+                            ? "⚠️ hoy"
+                            : `en ${s.days_left} día${s.days_left > 1 ? "s" : ""}`
+                      }`}
                   </p>
                   {s.currency !== BASE_CURRENCY && (
                     <p className="text-xs font-medium text-accent">
@@ -368,7 +473,11 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                     </p>
                   )}
                 </div>
-                <button className="text-xs font-medium text-accent" onClick={() => paySub(s)}>
+                <button
+                  className="shrink-0 rounded-lg border border-accent/30 bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent backdrop-blur transition hover:bg-accent/25"
+                  onClick={() => paySub(s)}
+                  title={`Registrar el cobro de ${s.name}`}
+                >
                   Cobrado
                 </button>
               </div>
@@ -382,10 +491,30 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
       <TransactionModal
         open={modal?.type === "tx"}
         type={modal?.txType}
+        sched={modal?.sched}
+        programadoDefault={!!modal?.programado}
+        rates={rates}
         accounts={accounts}
         categories={categories}
         contexts={contexts}
         goals={goals}
+        onClose={close}
+        onSaved={saved}
+      />
+      <ConcretarModal
+        open={modal?.type === "concretar"}
+        item={modal?.data}
+        cuentas={accounts}
+        tasas={rates}
+        onClose={close}
+        onSaved={saved}
+      />
+      <CobrarModal
+        open={modal?.type === "cobrar"}
+        item={modal?.data}
+        kind={modal?.kind}
+        cuentas={accounts}
+        tasas={rates}
         onClose={close}
         onSaved={saved}
       />

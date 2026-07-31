@@ -47,6 +47,9 @@ MIGRATIONS = [
     ("recurring_payments", "currency", "currency VARCHAR DEFAULT 'MXN'"),
     ("subscriptions", "currency", "currency VARCHAR DEFAULT 'MXN'"),
     ("accounts", "expected_income", "expected_income FLOAT DEFAULT 0"),
+    ("recurring_payments", "type", "type VARCHAR DEFAULT 'egreso'"),
+    ("accounts", "is_default", "is_default INTEGER DEFAULT 0"),
+    ("transactions", "via_paypal", "via_paypal BOOLEAN DEFAULT 0"),
 ]
 
 # Columnas que dejaron de usarse (necesita SQLite 3.35+, incluido desde Python 3.11)

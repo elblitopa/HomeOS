@@ -1,43 +1,100 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "../../api/client.js";
+import Comprobante from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import Button from "../../components/ui/Button.jsx";
+import TipoBadge from "../../components/ui/TipoBadge.jsx";
+import { dayKey } from "../../lib/calendarKinds.js";
 import { fmtMoney, formatDateTime } from "../../lib/constants.js";
 import { TransactionModal } from "./FinanceModals.jsx";
 
-const VIEWS = [
-  { key: "all", label: "Historial completo" },
-  { key: "in_today", label: "Ingresos de hoy" },
-  { key: "out_today", label: "Egresos de hoy" },
+// antes los chips mezclaban tipo y fecha ("ingresos de hoy"); ahora el tipo
+// va en chips y el periodo en su propio filtro, que combinados cubren lo mismo
+const TIPOS = [
+  { key: "", label: "Todo" },
+  { key: "ingreso", label: "Ingresos" },
+  { key: "egreso", label: "Egresos" },
+  { key: "transferencia", label: "Transferencias" },
 ];
 
+const PERIODOS = [
+  { key: "todo", label: "Todo el historial" },
+  { key: "hoy", label: "Hoy" },
+  { key: "semana", label: "Esta semana" },
+  { key: "mes", label: "Este mes" },
+  { key: "mes-elegir", label: "Elegir mes…" },
+  { key: "rango", label: "Rango de fechas…" },
+];
+
+/** El lunes (o domingo, según ajustes) de la semana en curso. */
+function inicioSemana(weekStart) {
+  const d = new Date();
+  const dia = d.getDay(); // 0 = domingo
+  const atras = weekStart === "sunday" ? dia : (dia + 6) % 7;
+  d.setDate(d.getDate() - atras);
+  return d;
+}
+
+const sumaDias = (d, n) => {
+  const copia = new Date(d);
+  copia.setDate(copia.getDate() + n);
+  return copia;
+};
+
 export default function TransactionsTab({ accounts, categories, contexts, contextsById, reload, version }) {
-  const [view, setView] = useState("all");
+  const [tipo, setTipo] = useState("");
+  const [periodo, setPeriodo] = useState("todo");
+  const [mesElegido, setMesElegido] = useState(""); // "2026-07"
+  const [rango, setRango] = useState({ desde: "", hasta: "" });
+  const [weekStart, setWeekStart] = useState("monday");
   const [accountFilter, setAccountFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [contextFilter, setContextFilter] = useState("");
   const [txs, setTxs] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [rates, setRates] = useState([]);
   const [modal, setModal] = useState(null); // {tx?} | null
 
   const accById = Object.fromEntries(accounts.map((a) => [a.id, a]));
   const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
 
+  useEffect(() => {
+    // para que "esta semana" empiece el mismo día que el calendario
+    apiGet("/api/settings")
+      .then((s) => setWeekStart(s.week_starts_on || "monday"))
+      .catch(() => {});
+  }, []);
+
   const refresh = useCallback(() => {
     const params = new URLSearchParams();
-    if (view === "in_today") {
-      params.set("type", "ingreso");
+    if (tipo) params.set("type", tipo);
+
+    if (periodo === "hoy") {
       params.set("today", "true");
-    } else if (view === "out_today") {
-      params.set("type", "egreso");
-      params.set("today", "true");
+    } else if (periodo === "semana") {
+      const inicio = inicioSemana(weekStart);
+      params.set("from", dayKey(inicio));
+      params.set("to", dayKey(sumaDias(inicio, 7)));
+    } else if (periodo === "mes") {
+      params.set("month", dayKey(new Date()).slice(0, 7));
+    } else if (periodo === "mes-elegir") {
+      if (!mesElegido) return; // hasta que elija un mes no hay qué pedir
+      params.set("month", mesElegido);
+    } else if (periodo === "rango") {
+      if (!rango.desde || !rango.hasta) return;
+      params.set("from", rango.desde);
+      // el servidor excluye el tope, pero el usuario elige días inclusivos
+      params.set("to", dayKey(sumaDias(new Date(`${rango.hasta}T12:00`), 1)));
     }
+
     if (accountFilter) params.set("account_id", accountFilter);
     if (categoryFilter) params.set("category_id", categoryFilter);
     if (contextFilter) params.set("context_id", contextFilter);
     apiGet(`/api/finance/transactions?${params}`).then(setTxs).catch(() => {});
     apiGet("/api/finance/goals").then(setGoals).catch(() => {});
-  }, [view, accountFilter, categoryFilter, contextFilter]);
+    // por si se marca como programado, que puede llevar otra divisa
+    apiGet("/api/finance/rates").then(setRates).catch(() => {});
+  }, [tipo, periodo, mesElegido, rango, weekStart, accountFilter, categoryFilter, contextFilter]);
 
   useEffect(refresh, [refresh, version]);
 
@@ -53,18 +110,50 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        {VIEWS.map((v) => (
+        {TIPOS.map((v) => (
           <button
             key={v.key}
-            onClick={() => setView(v.key)}
+            onClick={() => setTipo(v.key)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-              view === v.key ? "bg-accent text-white" : "bg-ink/5 text-ink-soft hover:bg-accent-soft"
+              tipo === v.key ? "bg-accent text-white" : "bg-ink/5 text-ink-soft hover:bg-accent-soft"
             }`}
           >
             {v.label}
           </button>
         ))}
         <span className="mx-1 h-4 w-px bg-ink/10" />
+        <select className={selectCls} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
+          {PERIODOS.map((p) => (
+            <option key={p.key} value={p.key}>
+              📅 {p.label}
+            </option>
+          ))}
+        </select>
+        {periodo === "mes-elegir" && (
+          <input
+            type="month"
+            className={selectCls}
+            value={mesElegido}
+            onChange={(e) => setMesElegido(e.target.value)}
+          />
+        )}
+        {periodo === "rango" && (
+          <>
+            <input
+              type="date"
+              className={selectCls}
+              value={rango.desde}
+              onChange={(e) => setRango((r) => ({ ...r, desde: e.target.value }))}
+            />
+            <span className="text-xs text-ink-soft">a</span>
+            <input
+              type="date"
+              className={selectCls}
+              value={rango.hasta}
+              onChange={(e) => setRango((r) => ({ ...r, hasta: e.target.value }))}
+            />
+          </>
+        )}
         <select className={selectCls} value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)}>
           <option value="">Todas las cuentas</option>
           {accounts.map((a) => (
@@ -112,7 +201,8 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
                 className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-surface/60"
                 onClick={() => setModal({ tx })}
               >
-                <span className="text-lg">{cat?.icon || (tx.type === "transferencia" ? "⇄" : "💸")}</span>
+                <TipoBadge type={tx.type} />
+                {cat && <span className="text-lg">{cat.icon}</span>}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{tx.description}</p>
                   <p className="truncate text-xs text-ink-soft">
@@ -125,16 +215,7 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
                   </p>
                 </div>
                 {tx.attachment_path && (
-                  <a
-                    href={tx.attachment_path}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    title={tx.attachment_name || "comprobante"}
-                    className="text-sm"
-                  >
-                    📎
-                  </a>
+                  <Comprobante path={tx.attachment_path} name={tx.attachment_name} />
                 )}
                 {badge(tx)}
               </div>
@@ -150,6 +231,7 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
         categories={categories}
         contexts={contexts}
         goals={goals}
+        rates={rates}
         onClose={() => setModal(null)}
         onSaved={() => {
           setModal(null);

@@ -60,6 +60,19 @@ export function dueText(iso) {
 // datetime-local input <-> ISO local sin zona
 export const toInputValue = (iso) => (iso ? iso.slice(0, 16) : "");
 
+/** Un Date al formato de <input type="datetime-local">, en hora LOCAL.
+ *
+ *  Nunca uses date.toISOString() para esto: devuelve UTC, que aquí adelanta
+ *  el reloj 6 horas. El backend rechaza los movimientos con fecha futura,
+ *  así que ese desfase rompía el concretar. */
+export function toInputLocal(date = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}` +
+    `T${p(date.getHours())}:${p(date.getMinutes())}`
+  );
+}
+
 // ---------- finanzas ----------
 
 export const ACCOUNT_KINDS = [

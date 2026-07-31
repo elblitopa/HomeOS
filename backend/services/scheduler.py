@@ -10,6 +10,7 @@ from backend.database import SessionLocal
 from backend.models import (
     Event,
     RecurringPayment,
+    ScheduledTransaction,
     SentReminder,
     Subscription,
     Todo,
@@ -114,6 +115,7 @@ def process_reminders() -> int:
                         sent += 1
 
         sent += _process_payment_notices(db, url, now)
+        sent += _process_scheduled_notices(db, url, now)
     return sent
 
 
@@ -147,12 +149,61 @@ def _process_payment_notices(db, url: str, now: datetime) -> int:
             if _already_sent(db, kind, item.id, key):
                 continue
             amount = item.amount if kind == "subscription" else item.installment_amount
-            label = "Suscripción" if kind == "subscription" else "Pago de deuda"
+            cobro = kind == "recurring" and (item.type or "egreso") == "ingreso"
+            if kind == "subscription":
+                icono, label = "💳", "Suscripción"
+            elif cobro:
+                icono, label = "💰", "Cobro a plazos"
+            else:
+                icono, label = "💳", "Pago de deuda"
             when = "es HOY" if days_until == 0 else "es mañana"
-            msg = f"💳 {label} **{item.name}** — ${amount:,.2f} {when} ({item.next_due.strftime('%d/%m')})"
+            msg = f"{icono} {label} **{item.name}** — ${amount:,.2f} {when} ({item.next_due.strftime('%d/%m')})"
             if send_webhook(msg, url):
                 _mark_sent(db, kind, item.id, key)
                 sent += 1
+    return sent
+
+
+# cuantos dias despues de la fecha se manda el recordatorio de vencido
+AVISO_VENCIDO = -3
+
+
+def _process_scheduled_notices(db, url: str, now: datetime) -> int:
+    """Ingresos y egresos programados: avisa la vispera, el dia, y una vez mas
+    si sigue sin confirmarse.
+
+    Usa la misma clave con fecha que los pagos porque aplazar mueve el
+    scheduled_for; sin la fecha dentro del dedup, un programado aplazado no
+    volveria a avisar nunca.
+    """
+    sent = 0
+    today = now.date()
+    pendientes = db.query(ScheduledTransaction).filter(
+        ScheduledTransaction.status == "pendiente"
+    ).all()
+
+    for item in pendientes:
+        days_until = (item.scheduled_for.date() - today).days
+        if days_until not in (0, 1, AVISO_VENCIDO):
+            continue
+        key = _payment_key(item.scheduled_for, days_until - AVISO_VENCIDO)
+        if _already_sent(db, "scheduled", item.id, key):
+            continue
+        icono = "📥" if item.type == "ingreso" else "📤"
+        divisa = item.currency or "MXN"
+        if days_until == 1:
+            cuando = "es mañana"
+        elif days_until == 0:
+            cuando = "es HOY"
+        else:
+            cuando = f"venció hace {abs(days_until)} días y sigue sin confirmarse"
+        msg = (
+            f"{icono} Programado **{item.description}** — ${item.amount:,.2f} {divisa} "
+            f"{cuando} ({item.scheduled_for.strftime('%d/%m')})"
+        )
+        if send_webhook(msg, url):
+            _mark_sent(db, "scheduled", item.id, key)
+            sent += 1
     return sent
 
 

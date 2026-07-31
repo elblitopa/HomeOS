@@ -19,6 +19,7 @@ from backend.models.finance import (
     Goal,
     PERIOD_MONTHS,
     RecurringPayment,
+    ScheduledTransaction,
     Subscription,
     Transaction,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "PERIOD_MONTHS",
     "Provider",
     "RecurringPayment",
+    "ScheduledTransaction",
     "SentReminder",
     "Setting",
     "Subscription",
