@@ -10,6 +10,8 @@ UPLOADS_DIR = DATA_DIR / "uploads"
 ICONS_DIR = UPLOADS_DIR / "icons"
 BANNERS_DIR = UPLOADS_DIR / "banners"
 FILES_DIR = UPLOADS_DIR / "files"
+# miniaturas generadas al vuelo; se pueden borrar, se regeneran solas
+THUMBS_DIR = UPLOADS_DIR / "thumbs"
 APPS_MANIFEST_DIR = BASE_DIR / "Apps"
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
@@ -19,5 +21,5 @@ VERSION = "1.0.0"
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, ICONS_DIR, BANNERS_DIR, FILES_DIR, APPS_MANIFEST_DIR):
+    for d in (DATA_DIR, ICONS_DIR, BANNERS_DIR, FILES_DIR, THUMBS_DIR, APPS_MANIFEST_DIR):
         d.mkdir(parents=True, exist_ok=True)
