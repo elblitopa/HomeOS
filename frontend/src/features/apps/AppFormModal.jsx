@@ -155,6 +155,7 @@ export default function AppFormModal({ open, app, onClose, onSaved }) {
             <input
               className={inputCls}
               type="number"
+              inputMode="numeric"
               value={form.port}
               onChange={set("port")}
               placeholder="7432"

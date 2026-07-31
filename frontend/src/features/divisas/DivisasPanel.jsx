@@ -44,6 +44,7 @@ function RateCard({ rate, accounts, onEdit, onAuto, onRemove, editing, setEditin
         <div className="flex items-center gap-2">
           <input
             type="number"
+            inputMode="decimal"
             step="any"
             className={inputCls}
             value={editing.value}

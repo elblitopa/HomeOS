@@ -24,7 +24,13 @@ export default function App() {
   return (
     // En movil el documento scrollea nativo (Safari deja pasar el contenido
     // tras sus barras translucidas); en desktop el scroll vive dentro de main.
-    <div className="homeos-bg flex min-h-full md:h-full">
+    //
+    // min-h-dvh y no min-h-full: en standalone con status-bar-style
+    // black-translucent, height:100% le devuelve a iOS la pantalla MENOS la
+    // barra de estado. En las paginas sin suficiente contenido ese 100% manda
+    // y toda la interfaz —la barra inferior incluida— queda unos 59 px arriba
+    // del fondo real. dvh si mide la pantalla completa.
+    <div className="homeos-bg flex min-h-dvh md:h-full">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <main
         className={`min-w-0 flex-1 md:overflow-y-auto max-md:pb-[calc(6rem+env(safe-area-inset-bottom,0px))] ${

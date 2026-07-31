@@ -42,6 +42,7 @@ export default function ConverterCard({ rates }) {
           Monto
           <input
             type="number"
+            inputMode="decimal"
             step="any"
             className={`${inputCls} !w-36`}
             value={amount}

@@ -57,25 +57,45 @@ html {
 body {
   margin: 0;
   color: var(--color-ink);
-  background-color: var(--color-bg);
+  /* el color de fondo vive en <html>: si body tambien lo pinta, tapa la capa
+     de luces, que va detras del contenido con z-index negativo */
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Fondo con gradientes azules sutilisimos para que el blur del
-   liquid glass tenga profundidad. */
 .homeos-bg {
   /* en standalone (PWA) el contenido se extiende bajo el notch */
   padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Fondo con gradientes azules sutilisimos para que el blur del liquid glass
+   tenga profundidad.
+   Va en una capa propia pegada al viewport en vez de usar
+   background-attachment: fixed, que iOS Safari no soporta: lo degrada a
+   scroll y pinta el degradado contra el alto completo del documento, asi que
+   las luces se estiran y se cortan al deslizar. */
+.homeos-bg::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* En las paginas que no scrollean (Tareas, Notas, Archivos) Safari nunca
+     colapsa sus barras. Un inset:0 se mide contra el viewport grande, asi que
+     la luz de abajo queda escondida tras la barra inferior; dvh sigue al
+     viewport visible y la capa siempre calza con lo que se ve. */
+  height: 100vh;
+  height: 100dvh;
+  z-index: -1;
+  pointer-events: none;
   background-color: var(--color-bg);
   background-image:
     radial-gradient(900px 600px at 8% -5%, rgba(35, 131, 226, 0.06), transparent 60%),
     radial-gradient(800px 500px at 100% 15%, rgba(35, 131, 226, 0.05), transparent 55%),
     radial-gradient(700px 700px at 50% 110%, rgba(35, 131, 226, 0.04), transparent 60%);
-  background-attachment: fixed;
 }
 
-.dark .homeos-bg {
+.dark .homeos-bg::before {
   background-image:
     radial-gradient(900px 600px at 8% -5%, rgba(35, 131, 226, 0.1), transparent 60%),
     radial-gradient(800px 500px at 100% 15%, rgba(35, 131, 226, 0.08), transparent 55%),
