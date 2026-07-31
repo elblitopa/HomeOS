@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPut } from "../../api/client.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiGet, apiPost, apiPut } from "../../api/client.js";
 import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import useContexts from "../../hooks/useContexts.js";
+import useDetalleItem from "../../hooks/useDetalleItem.js";
+import { COLORES_BASE, dayKey, KIND, KINDS, MOVABLE } from "../../lib/calendarKinds.js";
 import { formatDateTime } from "../../lib/constants.js";
 import DayView from "./DayView.jsx";
+import DetalleItemHost from "./DetalleItemHost.jsx";
 import EventFormModal from "./EventFormModal.jsx";
 
 const WEEKDAYS_LUN = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -16,23 +19,6 @@ const MONTHS = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-// que se muestra en el calendario y como. Las transacciones son muchas,
-// asi que empiezan apagadas para no saturar la vista.
-const KINDS = [
-  { key: "evento", label: "Eventos", icon: "📅", color: "#2383e2", on: true },
-  { key: "google", label: "Google", icon: "📆", color: "#ea4335", on: true },
-  { key: "tarea", label: "Tareas", icon: "✅", color: "#0ca678", on: true },
-  { key: "suscripcion", label: "Suscripciones", icon: "🔁", color: "#9c36b5", on: true },
-  { key: "pago", label: "Pagos", icon: "📆", color: "#e8590c", on: true },
-  { key: "meta", label: "Metas", icon: "🎯", color: "#f59e0b", on: true },
-  { key: "nota", label: "Notas", icon: "📝", color: "#6b6b70", on: true },
-  { key: "transaccion", label: "Transacciones", icon: "💸", color: "#3b5bdb", on: false },
-];
-
-const KIND = Object.fromEntries(KINDS.map((k) => [k.key, k]));
-const COLORES_BASE = Object.fromEntries(KINDS.map((k) => [k.key, k.color]));
-const pad = (n) => String(n).padStart(2, "0");
-const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 export default function CalendarPage() {
   const { contexts, byId } = useContexts();
@@ -53,6 +39,9 @@ export default function CalendarPage() {
   const [googleReady, setGoogleReady] = useState(false);
   // hasta que carguen los ajustes no se consulta, para no pedir dos veces
   const [listo, setListo] = useState(false);
+  // drag & drop: elemento en el aire y dia sobre el que pasa
+  const [dragItem, setDragItem] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null);
 
   useEffect(() => {
     apiGet("/api/settings")
@@ -181,40 +170,152 @@ export default function CalendarPage() {
     setModalOpen(true);
   };
 
-  const abrir = (item) => {
-    // los eventos de Google se editan contra Google; el resto vive en su sección
-    if (item.kind === "google") {
-      setEditing({
-        id: item.ref_id,
-        title: item.title,
-        description: item.detail || "",
-        start: item.date,
-        end: item.end,
-        all_day: item.all_day,
-        source: "google",
-        calendar_id: item.calendar_id,
-        calendar_name: item.calendar_name,
-      });
+  // El detalle y sus acciones viven en un hook compartido con Inicio: las
+  // acciones las manda el servidor, asi que duplicarlas seria condenarse a
+  // que un boton nuevo funcione en una pagina y en la otra no.
+  const detalle = useDetalleItem({
+    onRefresh: refresh,
+    contextsById: byId,
+    colors,
+    // el calendario si tiene su propio formulario de eventos
+    onEditarEvento: (payload) => {
+      setEditing(payload);
       setPrefillDate(null);
       setModalOpen(true);
-      return;
+    },
+  });
+  const { abrir, colorDe } = detalle;
+
+  // suelta el elemento arrastrado en otro dia: cambia la fecha, conserva la hora
+  const soltarEn = async (key, itemArg) => {
+    const item = itemArg || dragItem;
+    setDragItem(null);
+    setDropTarget(null);
+    if (!item || item.date.slice(0, 10) === key) return;
+    // se pinta en el nuevo dia de inmediato; si el servidor falla, se revierte
+    setItems((prev) =>
+      prev.map((i) =>
+        i.kind === item.kind && i.ref_id === item.ref_id && i.date === item.date
+          ? { ...i, date: key + i.date.slice(10) }
+          : i
+      )
+    );
+    try {
+      await apiPost("/api/calendar/move", {
+        kind: item.kind,
+        ref_id: String(item.ref_id),
+        day: key,
+        calendar_id: item.calendar_id || null,
+        start: item.kind === "google" ? item.date : null,
+        end: item.kind === "google" ? item.end || null : null,
+        all_day: !!item.all_day,
+      });
+    } catch (e) {
+      alert(`No se pudo mover: ${e.message}`);
     }
-    if (item.kind !== "evento") return;
-    const fecha = item.date.slice(0, 10);
-    apiGet(`/api/events?from=${fecha}&to=${fecha}T23:59`)
-      .then((list) => {
-        const found = list.find((e) => e.id === item.ref_id);
-        if (found) {
-          setEditing({ ...found, source: "homeos" });
-          setPrefillDate(null);
-          setModalOpen(true);
-        }
-      })
-      .catch(() => {});
+    refresh();
   };
 
-  // el color lo manda el tipo, para que coincida con los chips de arriba
-  const colorDe = (item) => colors[item.kind] || COLORES_BASE[item.kind] || "#2383e2";
+  // ── drag con el dedo (touch) ──────────────────────────────────────────────
+  // El drag & drop nativo de HTML no existe en pantallas tactiles, asi que:
+  // manten presionado un chip ~medio segundo para "levantarlo" (vibra si el
+  // telefono puede), arrastra el fantasma que sigue al dedo y suelta sobre el
+  // dia destino. Si el dedo se mueve antes del medio segundo, es scroll normal.
+  const touchDrag = useRef(null);
+
+  const cancelarTouch = () => {
+    const d = touchDrag.current;
+    if (!d) return;
+    clearTimeout(d.timer);
+    clearInterval(d.autoscroll);
+    d.quitar?.();
+    d.ghost?.remove();
+    touchDrag.current = null;
+    setDragItem(null);
+    setDropTarget(null);
+  };
+
+  const iniciarTouch = (e, item) => {
+    if (!MOVABLE.has(item.kind) || touchDrag.current) return;
+    const t = e.touches[0];
+    const chip = e.currentTarget;
+    const d = {
+      item,
+      chip,
+      startX: t.clientX,
+      startY: t.clientY,
+      active: false,
+      timer: setTimeout(() => {
+        d.active = true;
+        setDragItem(item);
+        navigator.vibrate?.(30);
+        const rect = chip.getBoundingClientRect();
+        const g = chip.cloneNode(true);
+        g.style.cssText = `position:fixed;left:0;top:0;width:${rect.width}px;z-index:9999;` +
+          "pointer-events:none;opacity:.92;transform-origin:center;box-shadow:0 10px 30px rgba(0,0,0,.35);" +
+          `background-color:${getComputedStyle(chip).backgroundColor};border-radius:8px;`;
+        document.body.appendChild(g);
+        d.ghost = g;
+        d.moverGhost = (x, y) => {
+          g.style.transform = `translate(${x - rect.width / 2}px, ${y - rect.height - 14}px) scale(1.05)`;
+        };
+        d.moverGhost(d.startX, d.startY);
+        d.lastX = d.startX;
+        d.lastY = d.startY;
+        // con el scroll bloqueado durante el drag, acercar el dedo al borde
+        // superior/inferior desplaza la pagina para alcanzar dias fuera de vista
+        d.autoscroll = setInterval(() => {
+          const margen = 90;
+          let dy = 0;
+          if (d.lastY < margen) dy = -14;
+          else if (d.lastY > window.innerHeight - margen) dy = 14;
+          if (!dy) return;
+          window.scrollBy(0, dy);
+          const el = document.elementFromPoint(d.lastX, d.lastY);
+          const cell = el && el.closest("[data-daykey]");
+          setDropTarget(cell ? cell.dataset.daykey : null);
+        }, 16);
+      }, 450),
+    };
+
+    const onMove = (ev) => {
+      const tt = ev.touches[0];
+      if (!d.active) {
+        // se movio antes del long-press: el usuario esta haciendo scroll
+        if (Math.abs(tt.clientX - d.startX) > 10 || Math.abs(tt.clientY - d.startY) > 10) cancelarTouch();
+        return;
+      }
+      ev.preventDefault(); // ya esta arrastrando: la pagina no debe hacer scroll
+      d.lastX = tt.clientX;
+      d.lastY = tt.clientY;
+      d.moverGhost(tt.clientX, tt.clientY);
+      const el = document.elementFromPoint(tt.clientX, tt.clientY);
+      const cell = el && el.closest("[data-daykey]");
+      setDropTarget(cell ? cell.dataset.daykey : null);
+    };
+
+    const onEnd = (ev) => {
+      const activo = d.active;
+      if (activo && ev.cancelable) ev.preventDefault(); // evita el click fantasma al soltar
+      const tt = ev.changedTouches[0];
+      cancelarTouch();
+      if (activo && tt) {
+        const el = document.elementFromPoint(tt.clientX, tt.clientY);
+        const cell = el && el.closest("[data-daykey]");
+        if (cell) soltarEn(cell.dataset.daykey, item);
+      }
+    };
+
+    d.quitar = () => {
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onEnd);
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd, { passive: false });
+    document.addEventListener("touchcancel", onEnd);
+    touchDrag.current = d;
+  };
 
   const todayKey = dayKey(today);
   const enDia = view === "dia";
@@ -337,10 +438,26 @@ export default function CalendarPage() {
               return (
                 <div
                   key={key}
-                  className={`min-h-16 cursor-pointer rounded-xl border border-transparent p-1 transition hover:border-accent/40 hover:bg-accent-soft/40 md:min-h-24 md:p-1.5 ${
-                    inMonth ? "" : "opacity-35"
-                  }`}
+                  data-daykey={key}
+                  className={`min-h-16 cursor-pointer rounded-xl border p-1 transition hover:border-accent/40 hover:bg-accent-soft/40 md:min-h-24 md:p-1.5 ${
+                    dropTarget === key && dragItem
+                      ? "border-accent bg-accent-soft/60"
+                      : "border-transparent"
+                  } ${inMonth ? "" : "opacity-35"}`}
                   onClick={() => openNew(key)}
+                  onDragOver={(e) => {
+                    if (!dragItem) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropTarget !== key) setDropTarget(key);
+                  }}
+                  onDragLeave={() => {
+                    if (dropTarget === key) setDropTarget(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    soltarEn(key);
+                  }}
                 >
                   <button
                     className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium transition hover:bg-accent/20 ${
@@ -360,15 +477,29 @@ export default function CalendarPage() {
                         key={`${item.kind}-${item.ref_id}-${i}`}
                         className={`truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium text-white ${
                           item.done ? "line-through opacity-60" : ""
-                        }`}
+                        } ${
+                          MOVABLE.has(item.kind)
+                            ? "cursor-grab select-none active:cursor-grabbing [-webkit-touch-callout:none]"
+                            : ""
+                        } ${dragItem === item ? "opacity-40" : ""}`}
                         style={{ backgroundColor: colorDe(item) }}
+                        draggable={MOVABLE.has(item.kind)}
+                        onDragStart={(e) => {
+                          setDragItem(item);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          setDragItem(null);
+                          setDropTarget(null);
+                        }}
+                        onTouchStart={(e) => iniciarTouch(e, item)}
                         onClick={(e) => {
                           e.stopPropagation();
                           abrir(item);
                         }}
                         title={`${KIND[item.kind]?.label}: ${item.title}${
                           item.detail ? ` · ${item.detail}` : ""
-                        }`}
+                        }${MOVABLE.has(item.kind) ? " — arrástralo a otro día para moverlo" : ""}`}
                       >
                         {KIND[item.kind]?.icon} {item.title}
                       </button>
@@ -400,7 +531,7 @@ export default function CalendarPage() {
                   style={{ backgroundColor: colorDe(item) }}
                 />
                 <div
-                  className={`min-w-0 flex-1 ${item.kind === "evento" ? "cursor-pointer" : ""}`}
+                  className="min-w-0 flex-1 cursor-pointer"
                   onClick={() => abrir(item)}
                 >
                   <p className={`truncate font-medium ${item.done ? "line-through opacity-60" : ""}`}>
@@ -438,6 +569,8 @@ export default function CalendarPage() {
           refresh();
         }}
       />
+
+      <DetalleItemHost {...detalle.hostProps} contextos={contexts} />
 
       <Modal
         open={coloresAbiertos}
