@@ -20,14 +20,61 @@ export default function SettingsPage() {
 
   const [weekStart, setWeekStart] = useState("monday");
 
+  const [nombre, setNombre] = useState("");
+  const [nombreMsg, setNombreMsg] = useState(null);
+  const [frases, setFrases] = useState([]);
+  const [fijadas, setFijadas] = useState([]);
+  const [nuevaFrase, setNuevaFrase] = useState("");
+  const [fraseError, setFraseError] = useState(null);
+
   useEffect(() => {
     apiGet("/api/settings")
       .then((s) => {
         setWebhook(s.discord_webhook_url || "");
         setWeekStart(s.week_starts_on || "monday");
+        setNombre(s.user_name || "");
+        setFrases(s.quotes_custom || []);
+        setFijadas(s.quotes_pinned || []);
       })
       .catch(() => {});
   }, []);
+
+  const guardarNombre = async () => {
+    setBusy(true);
+    setNombreMsg(null);
+    try {
+      const s = await apiPut("/api/settings", { user_name: nombre });
+      setNombre(s.user_name || "");
+      // el saludo de Inicio lee este espejo para no parpadear al abrir
+      localStorage.setItem("homeos-nombre", s.user_name || "");
+      setNombreMsg({ ok: true, text: "Guardado." });
+    } catch (e) {
+      setNombreMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const guardarFrases = async (propias, marcadas) => {
+    const previas = { propias: frases, marcadas: fijadas };
+    setFrases(propias);
+    setFijadas(marcadas);
+    setFraseError(null);
+    try {
+      await apiPut("/api/settings", { quotes_custom: propias, quotes_pinned: marcadas });
+    } catch (e) {
+      setFrases(previas.propias);
+      setFijadas(previas.marcadas);
+      setFraseError(e.message);
+    }
+  };
+
+  const agregarFrase = () => {
+    const texto = nuevaFrase.trim();
+    if (!texto) return;
+    setNuevaFrase("");
+    guardarFrases([...frases, texto], fijadas);
+  };
 
   const cambiarInicioSemana = async (value) => {
     const previo = weekStart;
@@ -93,6 +140,96 @@ export default function SettingsPage() {
       <TopBar title="Ajustes" />
 
       <div className="flex max-w-2xl flex-col gap-6">
+        <GlassCard className="p-5">
+          <h2 className="mb-1 font-semibold">Tu nombre</h2>
+          <p className="mb-3 text-sm text-ink-soft">
+            Con esto te saluda la pantalla de Inicio.
+          </p>
+          <div className="flex gap-2">
+            <input
+              className={inputCls}
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && guardarNombre()}
+              placeholder="Pablo"
+              maxLength={40}
+            />
+            <Button onClick={guardarNombre} disabled={busy}>
+              Guardar
+            </Button>
+          </div>
+          {nombreMsg && (
+            <p className={`mt-2 text-sm ${nombreMsg.ok ? "text-ok" : "text-err"}`}>
+              {nombreMsg.text}
+            </p>
+          )}
+        </GlassCard>
+
+        <GlassCard className="p-5">
+          <h2 className="mb-1 font-semibold">Frases de Inicio</h2>
+          <p className="mb-3 text-sm text-ink-soft">
+            Cada día sale una distinta. HomeOS trae unas cuantas; aquí puedes agregar las
+            tuyas y ver las que guardaste con el pin.
+          </p>
+          <div className="flex gap-2">
+            <input
+              className={inputCls}
+              value={nuevaFrase}
+              onChange={(e) => setNuevaFrase(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && agregarFrase()}
+              placeholder="Escribe una frase y presiona Enter"
+              maxLength={240}
+            />
+            <Button onClick={agregarFrase} disabled={!nuevaFrase.trim()}>
+              Agregar
+            </Button>
+          </div>
+          {fraseError && <p className="mt-2 text-sm text-err">{fraseError}</p>}
+
+          {frases.length > 0 && (
+            <div className="mt-3 flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-ink-soft">Tuyas</span>
+              {frases.map((f) => (
+                <div
+                  key={f}
+                  className="flex items-start gap-2 rounded-xl border border-glass-border bg-surface/50 px-3 py-2"
+                >
+                  <span className="flex-1 text-sm">{f}</span>
+                  <button
+                    className="shrink-0 text-sm text-ink-soft transition hover:text-err"
+                    title="Quitar"
+                    onClick={() => guardarFrases(frases.filter((x) => x !== f), fijadas)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {fijadas.length > 0 && (
+            <div className="mt-3 flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-ink-soft">Guardadas con el pin</span>
+              {fijadas.map((f) => (
+                <div
+                  key={f}
+                  className="flex items-start gap-2 rounded-xl border border-glass-border bg-surface/50 px-3 py-2"
+                >
+                  <span className="shrink-0">📌</span>
+                  <span className="flex-1 text-sm">{f}</span>
+                  <button
+                    className="shrink-0 text-sm text-ink-soft transition hover:text-err"
+                    title="Quitar de las guardadas"
+                    onClick={() => guardarFrases(frases, fijadas.filter((x) => x !== f))}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+
         <GlassCard className="p-5">
           <h2 className="mb-1 font-semibold">Notificaciones de Discord</h2>
           <p className="mb-3 text-sm text-ink-soft">

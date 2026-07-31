@@ -3,18 +3,22 @@ import { NavLink, useLocation } from "react-router-dom";
 import usePing from "../../hooks/usePing.js";
 import useTheme from "../../hooks/useTheme.js";
 
+// `short` es la etiqueta de la barra móvil, donde no cabe la larga.
+// `end` evita que un enlace quede activo por coincidencia de prefijo: sin él,
+// "/" haría match con todas las rutas y el de Inicio siempre se vería activo.
 const NAV = [
-  { to: "/", label: "Apps", icon: "🚀", enabled: true },
-  { to: "/calendario", label: "Calendario", icon: "📅", enabled: true },
-  { to: "/tareas", label: "Tareas", icon: "✅", enabled: true },
-  { to: "/finanzas", label: "Finanzas & Negocios", icon: "💼", enabled: true },
-  { to: "/rutinas", label: "Rutinas", icon: "🔁", enabled: true },
-  { to: "/notas", label: "Notas", icon: "📝", enabled: true },
-  { to: "/archivos", label: "Archivos", icon: "📁", enabled: true },
-  { to: "/ajustes", label: "Ajustes", icon: "⚙️", enabled: true },
+  { to: "/", label: "Inicio", icon: "🏠", end: true },
+  { to: "/calendario", label: "Calendario", icon: "📅" },
+  { to: "/tareas", label: "Tareas", icon: "✅" },
+  { to: "/finanzas", label: "Finanzas & Negocios", short: "Finanzas", icon: "💼" },
+  { to: "/apps", label: "Apps", icon: "🚀" },
+  { to: "/rutinas", label: "Rutinas", icon: "🔁" },
+  { to: "/notas", label: "Notas", icon: "📝" },
+  { to: "/archivos", label: "Archivos", icon: "📁" },
+  { to: "/ajustes", label: "Ajustes", icon: "⚙️" },
 ];
 
-// en la barra inferior móvil caben 4 + "Más"
+// en la barra inferior móvil caben 4 + "Más"; el resto se va al menú
 const MOBILE_MAIN = ["/", "/calendario", "/tareas", "/finanzas"];
 
 function PingDot() {
@@ -56,14 +60,17 @@ function MobileNav() {
           className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
           onClick={() => setMoreOpen(false)}
         >
+          {/* con scroll propio: crece hacia arriba y en pantallas cortas o en
+              horizontal se saldría de cuadro */}
           <div
-            className="glass absolute inset-x-3 bg-surface/90 p-2 [bottom:calc(5rem+env(safe-area-inset-bottom,0px))]"
+            className="glass absolute inset-x-3 max-h-[60dvh] overflow-y-auto bg-surface/90 p-2 [bottom:calc(5rem+env(safe-area-inset-bottom,0px))]"
             onClick={(e) => e.stopPropagation()}
           >
             {extra.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.end}
                 onClick={() => setMoreOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
@@ -90,6 +97,7 @@ function MobileNav() {
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.end}
             onClick={() => setMoreOpen(false)}
             className={({ isActive }) =>
               `flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-[10px] font-medium transition ${
@@ -98,7 +106,7 @@ function MobileNav() {
             }
           >
             <span className="text-lg leading-none">{item.icon}</span>
-            {item.label === "Finanzas & Negocios" ? "Finanzas" : item.label}
+            {item.short || item.label}
           </NavLink>
         ))}
         <button
@@ -151,6 +159,7 @@ export default function Sidebar({ collapsed = false, onToggle }) {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${
                   isActive ? "bg-accent text-white shadow-sm" : "text-ink hover:bg-accent-soft"

@@ -22,6 +22,14 @@ KINDS_KEY = "calendar_kinds"
 SYNC_TODOS_KEY = "google_sync_todos"
 SYNC_FINANCE_KEY = "google_sync_finance"
 
+# portada: como saludar y las frases del dia
+USER_NAME_KEY = "user_name"
+QUOTES_KEY = "quotes_custom"     # las que escribio el usuario
+PINNED_KEY = "quotes_pinned"     # las que marco con el pin, guardadas por texto
+MAX_NOMBRE = 40
+MAX_FRASES = 100
+MAX_LARGO_FRASE = 240
+
 # lo que se ve por defecto: todo menos las transacciones, que son muchas
 DEFAULT_KINDS = [
     "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota", "programado",
@@ -47,6 +55,9 @@ class SettingsPayload(BaseModel):
     calendar_kinds: list[str] | None = None
     google_sync_todos: bool | None = None
     google_sync_finance: bool | None = None
+    user_name: str | None = None
+    quotes_custom: list[str] | None = None
+    quotes_pinned: list[str] | None = None
 
 
 def _colors(db: Session) -> dict:
@@ -68,6 +79,39 @@ def _kinds(db: Session) -> list[str]:
     return [k for k in guardados if k in DEFAULT_COLORS]
 
 
+def _frases(db: Session, key: str) -> list[str]:
+    """Lista de textos guardada como JSON. Si esta corrupta se ignora, para
+    que un valor malo no tumbe toda la pantalla de ajustes."""
+    raw = get_setting(db, key)
+    if not raw:
+        return []
+    try:
+        guardadas = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(guardadas, list):
+        return []
+    return [s for s in guardadas if isinstance(s, str) and s.strip()]
+
+
+def _limpiar_frases(valores: list[str] | None) -> list[str]:
+    """Recorta, tira las vacias y quita duplicados conservando el orden."""
+    limpias: list[str] = []
+    for valor in valores or []:
+        texto = (valor or "").strip()
+        if not texto:
+            continue
+        if len(texto) > MAX_LARGO_FRASE:
+            raise HTTPException(
+                400, f"Las frases no pueden pasar de {MAX_LARGO_FRASE} caracteres."
+            )
+        if texto not in limpias:
+            limpias.append(texto)
+    if len(limpias) > MAX_FRASES:
+        raise HTTPException(400, f"No caben más de {MAX_FRASES} frases.")
+    return limpias
+
+
 @router.get("")
 def read_settings(db: Session = Depends(get_db)):
     return {
@@ -77,6 +121,9 @@ def read_settings(db: Session = Depends(get_db)):
         "calendar_kinds": _kinds(db),
         "google_sync_todos": (get_setting(db, SYNC_TODOS_KEY) or "1") == "1",
         "google_sync_finance": (get_setting(db, SYNC_FINANCE_KEY) or "1") == "1",
+        "user_name": get_setting(db, USER_NAME_KEY) or "",
+        "quotes_custom": _frases(db, QUOTES_KEY),
+        "quotes_pinned": _frases(db, PINNED_KEY),
     }
 
 
@@ -118,6 +165,18 @@ def write_settings(payload: SettingsPayload, db: Session = Depends(get_db)):
                        ("google_sync_finance", SYNC_FINANCE_KEY)):
         if campo in data:
             set_setting(db, key, "1" if data[campo] else "0")
+
+    if "user_name" in data:
+        nombre = (data["user_name"] or "").strip()
+        if len(nombre) > MAX_NOMBRE:
+            raise HTTPException(400, f"El nombre no puede pasar de {MAX_NOMBRE} caracteres.")
+        set_setting(db, USER_NAME_KEY, nombre or None)
+
+    # ensure_ascii=False para que la base quede legible con acentos
+    for campo, key in (("quotes_custom", QUOTES_KEY), ("quotes_pinned", PINNED_KEY)):
+        if campo in data:
+            limpias = _limpiar_frases(data[campo])
+            set_setting(db, key, json.dumps(limpias, ensure_ascii=False))
 
     return read_settings(db)
 

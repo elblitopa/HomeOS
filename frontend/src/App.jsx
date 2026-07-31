@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar.jsx";
+import InicioPage from "./features/inicio/InicioPage.jsx";
 import AppsPage from "./features/apps/AppsPage.jsx";
 import CalendarPage from "./features/calendar/CalendarPage.jsx";
 import FilesPage from "./features/files/FilesPage.jsx";
@@ -38,7 +39,8 @@ export default function App() {
         }`}
       >
         <Routes>
-          <Route path="/" element={<AppsPage />} />
+          <Route path="/" element={<InicioPage />} />
+          <Route path="/apps" element={<AppsPage />} />
           <Route path="/calendario" element={<CalendarPage />} />
           <Route path="/tareas" element={<TodosPage />} />
           <Route path="/finanzas" element={<FinancePage />} />
@@ -46,7 +48,9 @@ export default function App() {
           <Route path="/notas" element={<NotesPage />} />
           <Route path="/archivos" element={<FilesPage />} />
           <Route path="/ajustes" element={<SettingsPage />} />
-          <Route path="*" element={<AppsPage />} />
+          {/* Navigate y no la página directa: si no, una URL desconocida
+              pintaría Inicio pero ningún enlace del menú quedaría activo */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
