@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client.js";
 import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import Modal from "../../components/ui/Modal.jsx";
+import useCardSort from "../../hooks/useCardSort.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
 
 const dayKey = (offset) => {
@@ -84,9 +85,32 @@ export default function RoutinesPage() {
     refresh();
   };
 
+  // acomodo de la lista: viene del servidor y se puede reordenar arrastrando
+  const [order, setOrder] = useState([]);
+
+  useEffect(() => {
+    const ids = routines.map((r) => r.id);
+    setOrder((prev) => {
+      const kept = prev.filter((id) => ids.includes(id));
+      const added = ids.filter((id) => !kept.includes(id));
+      return [...kept, ...added];
+    });
+  }, [routines]);
+
+  const ordered = useMemo(() => {
+    const byId = new Map(routines.map((r) => [r.id, r]));
+    return order.map((id) => byId.get(id)).filter(Boolean);
+  }, [routines, order]);
+
+  const { draggingId, handleProps } = useCardSort({
+    order,
+    onReorder: setOrder,
+    onCommit: (ids) => apiPost("/api/routines/reorder", { ids }).catch(() => {}),
+  });
+
   const save = async () => {
     if (!form.name.trim()) return;
-    const payload = { name: form.name.trim(), icon: form.icon || "✅", active: true, sort_order: 0 };
+    const payload = { name: form.name.trim(), icon: form.icon || "✅", active: true };
     if (modal.item) await apiPut(`/api/routines/${modal.item.id}`, payload);
     else await apiPost("/api/routines", payload);
     setModal(null);
@@ -138,10 +162,13 @@ export default function RoutinesPage() {
               </p>
             ) : (
               <div className="flex flex-col gap-1.5">
-                {routines.map((r) => (
+                {ordered.map((r) => (
                   <div
                     key={r.id}
+                    data-sort-id={r.id}
                     className={`flex items-center gap-1 rounded-xl border transition ${
+                      draggingId === String(r.id) ? "opacity-60 ring-2 ring-accent" : ""
+                    } ${
                       r.done_today
                         ? "border-ok/30 bg-ok/5"
                         : "border-glass-border bg-surface/50 hover:border-accent/40"
@@ -173,6 +200,13 @@ export default function RoutinesPage() {
                       title={`Editar o eliminar "${r.name}"`}
                     >
                       ✏️
+                    </button>
+                    <button
+                      {...handleProps(r.id)}
+                      className="shrink-0 rounded-lg px-2 py-2 text-sm text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+                      title="Arrastra para acomodar"
+                    >
+                      ⠿
                     </button>
                   </div>
                 ))}
@@ -209,7 +243,7 @@ export default function RoutinesPage() {
                     </span>
                   ))}
                 </div>
-                {routines.map((r) => (
+                {ordered.map((r) => (
                   <div key={r.id} className="grid grid-cols-[1fr_repeat(7,24px)] items-center gap-1">
                     <span className="truncate text-xs font-medium">
                       {r.icon} {r.name}

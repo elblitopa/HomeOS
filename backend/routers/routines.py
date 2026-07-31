@@ -15,7 +15,12 @@ class RoutinePayload(BaseModel):
     name: str = Field(min_length=1)
     icon: str = "✅"
     active: bool = True
-    sort_order: int = 0
+    # None = no tocar el acomodo (al crear se va al final de la lista)
+    sort_order: int | None = None
+
+
+class ReorderPayload(BaseModel):
+    ids: list[int]
 
 
 def _today() -> str:
@@ -36,15 +41,32 @@ def list_routines(db: Session = Depends(get_db)):
 
 @router.post("", status_code=201)
 def create_routine(payload: RoutinePayload, db: Session = Depends(get_db)):
+    if payload.sort_order is None:
+        last = db.query(func.max(Routine.sort_order)).scalar()
+        sort_order = 0 if last is None else last + 1
+    else:
+        sort_order = payload.sort_order
     routine = Routine(
         name=payload.name.strip(),
         icon=payload.icon or "✅",
         active=1 if payload.active else 0,
-        sort_order=payload.sort_order,
+        sort_order=sort_order,
     )
     db.add(routine)
     db.commit()
     return routine.to_dict()
+
+
+@router.post("/reorder")
+def reorder_routines(payload: ReorderPayload, db: Session = Depends(get_db)):
+    """Guarda el acomodo de la lista (drag & drop)."""
+    routines = {r.id: r for r in db.query(Routine).all()}
+    for index, routine_id in enumerate(payload.ids):
+        routine = routines.get(routine_id)
+        if routine:
+            routine.sort_order = index
+    db.commit()
+    return {"ordered": len(payload.ids)}
 
 
 @router.put("/{routine_id}")
@@ -55,7 +77,8 @@ def update_routine(routine_id: int, payload: RoutinePayload, db: Session = Depen
     routine.name = payload.name.strip()
     routine.icon = payload.icon or "✅"
     routine.active = 1 if payload.active else 0
-    routine.sort_order = payload.sort_order
+    if payload.sort_order is not None:
+        routine.sort_order = payload.sort_order
     db.commit()
     return routine.to_dict()
 
