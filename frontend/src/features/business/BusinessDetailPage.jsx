@@ -6,6 +6,7 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import BusinessFormModal from "./BusinessFormModal.jsx";
 import ContentSection from "./ContentSection.jsx";
+import PaymentsSection from "./PaymentsSection.jsx";
 import ProjectsSection from "./ProjectsSection.jsx";
 import ProvidersSection from "./ProvidersSection.jsx";
 import {
@@ -108,11 +109,7 @@ export default function BusinessDetailPage() {
       {section === "proveedores" && (
         <ProvidersSection contextId={negocio.id} contexts={contexts} contextsById={byId} version={version} />
       )}
-      {section === "pagos" && (
-        <GlassCard className="p-8 text-center text-sm text-ink-soft">
-          Los pagos a terceros llegan en una fase próxima.
-        </GlassCard>
-      )}
+      {section === "pagos" && <PaymentsSection contextId={negocio.id} version={version} />}
       {section === "crm" && <CrmSection contextId={negocio.id} contextsById={byId} version={version} />}
       {section === "contenido" && <ContentSection contextId={negocio.id} />}
       {section === "competidores" && <CompetitorsSection contextId={negocio.id} />}

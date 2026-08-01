@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiDelete, apiPost, apiPut, apiUpload } from "../../api/client.js";
+import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import {
@@ -796,7 +796,7 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
 
 // ---------- Pago recurrente: deuda que pagas o dinero que te abonan ----------
 
-export function RecurringModal({ open, item, accounts, categories, rates = [], onClose, onSaved }) {
+export function RecurringModal({ open, item, accounts, categories, contexts = [], rates = [], onClose, onSaved }) {
   const { form, set, setForm, error, setError, saving, setSaving } = useForm(open, {
     name: item?.name || "",
     type: item?.type || "egreso",
@@ -809,8 +809,16 @@ export function RecurringModal({ open, item, accounts, categories, rates = [], o
     frequency: item?.frequency || "mensual",
     category_id: item?.category_id ?? "",
     account_id: item?.account_id ?? "",
+    context_id: item?.context_id ?? "",
+    provider_id: item?.provider_id ?? "",
     next_due: item?.next_due ? toInputValue(item.next_due).slice(0, 10) : "",
   });
+
+  // los proveedores viven en /api/business, no vienen en las props de Finanzas
+  const [providers, setProviders] = useState([]);
+  useEffect(() => {
+    if (open) apiGet("/api/business/providers").then(setProviders).catch(() => {});
+  }, [open]);
 
   // los textos cambian según sea una deuda que pagas o un cobro que recibes
   const cobro = form.type === "ingreso";
@@ -855,6 +863,8 @@ export function RecurringModal({ open, item, accounts, categories, rates = [], o
         frequency: form.frequency,
         category_id: form.category_id ? Number(form.category_id) : null,
         account_id: form.account_id ? Number(form.account_id) : null,
+        context_id: form.context_id ? Number(form.context_id) : null,
+        provider_id: form.provider_id ? Number(form.provider_id) : null,
         next_due: form.next_due ? `${form.next_due}T09:00` : null,
       };
       if (item) await apiPut(`/api/finance/recurring/${item.id}`, payload);
@@ -962,6 +972,33 @@ export function RecurringModal({ open, item, accounts, categories, rates = [], o
             ))}
           </select>
         </label>
+
+        {/* con negocio y proveedor, cada cuota que se registre nace ya
+            etiquetada y aparece en la sección Pagos de ese negocio */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Negocio / contexto
+            <select className={selectCls} value={form.context_id} onChange={set("context_id")}>
+              <option value="">—</option>
+              {contexts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Proveedor
+            <select className={selectCls} value={form.provider_id} onChange={set("provider_id")}>
+              <option value="">—</option>
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {error && <p className="text-sm text-err">{error}</p>}
         <Footer onDelete={item ? remove : null} onClose={onClose} onSave={save} saving={saving} />

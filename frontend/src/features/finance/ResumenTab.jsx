@@ -524,6 +524,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
         item={modal?.data}
         accounts={accounts}
         categories={categories}
+        contexts={contexts}
         rates={rates}
         onClose={close}
         onSaved={saved}
