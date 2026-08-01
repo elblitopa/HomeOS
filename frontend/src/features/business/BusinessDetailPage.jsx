@@ -6,6 +6,7 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import BusinessFormModal from "./BusinessFormModal.jsx";
 import ContentSection from "./ContentSection.jsx";
+import ProjectsSection from "./ProjectsSection.jsx";
 import ProvidersSection from "./ProvidersSection.jsx";
 import {
   CompetitorsSection,
@@ -103,11 +104,7 @@ export default function BusinessDetailPage() {
         ))}
       </div>
 
-      {section === "proyectos" && (
-        <GlassCard className="p-8 text-center text-sm text-ink-soft">
-          La matriz de proyectos llega en la siguiente fase.
-        </GlassCard>
-      )}
+      {section === "proyectos" && <ProjectsSection contextId={negocio.id} />}
       {section === "proveedores" && (
         <ProvidersSection contextId={negocio.id} contexts={contexts} contextsById={byId} version={version} />
       )}
