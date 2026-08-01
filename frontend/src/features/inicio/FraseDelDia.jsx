@@ -28,7 +28,11 @@ export default function FraseDelDia({ frase, fijadas, onFijadasChange }) {
   };
 
   return (
-    <GlassCard className="flex items-start gap-3 p-4">
+    // items-center y no items-start: el botón del pin es más alto que una
+    // línea de texto, así que con start la frase se quedaba pegada arriba y
+    // se veía descuadrada. Solo afecta el eje vertical; el ancho lo sigue
+    // repartiendo el flex-1 del párrafo.
+    <GlassCard className="flex items-center gap-3 p-4">
       <p className="min-w-0 flex-1 text-sm italic text-ink-soft">{frase}</p>
       <button
         onClick={alternar}
