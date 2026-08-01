@@ -5,7 +5,7 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import { inputCls } from "../todos/TaskFormModal.jsx";
 
-function ProviderModal({ open, provider, contexts, onClose, onSaved }) {
+function ProviderModal({ open, provider, contexts, defaultContextId, onClose, onSaved }) {
   const [form, setForm] = useState({});
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -21,7 +21,8 @@ function ProviderModal({ open, provider, contexts, onClose, onSaved }) {
         links: provider?.links || [],
         attachments: provider?.attachments || [],
         notes: provider?.notes || "",
-        context_id: provider?.context_id ?? "",
+        // al crear desde un negocio, el select viene con ese negocio puesto
+        context_id: provider ? provider.context_id ?? "" : defaultContextId ?? "",
         newLink: "",
       });
       setError(null);
@@ -206,15 +207,28 @@ function ProviderModal({ open, provider, contexts, onClose, onSaved }) {
   );
 }
 
-export default function ProvidersTab({ contexts, contextsById, version }) {
+/** Los proveedores de un negocio.
+ *
+ *  Vive dentro del detalle del negocio, así que el filtro por negocio ya no
+ *  es un chip: es el contextId de la página. El chip "Generales" enseña los
+ *  proveedores sin negocio (compartidos), que se adoptan editándolos y
+ *  eligiendo este negocio en el campo Negocio.
+ */
+export default function ProvidersSection({ contextId, contexts, contextsById, version }) {
   const [providers, setProviders] = useState([]);
-  const [contextFilter, setContextFilter] = useState("");
+  const [verGenerales, setVerGenerales] = useState(false);
   const [modal, setModal] = useState(null);
 
   const refresh = useCallback(() => {
-    const params = contextFilter ? `?context_id=${contextFilter}` : "";
-    apiGet(`/api/business/providers${params}`).then(setProviders).catch(() => {});
-  }, [contextFilter]);
+    if (verGenerales) {
+      // el endpoint no filtra por null, asi que se piden todos y se cierne aqui
+      apiGet("/api/business/providers")
+        .then((all) => setProviders(all.filter((p) => !p.context_id)))
+        .catch(() => {});
+    } else {
+      apiGet(`/api/business/providers?context_id=${contextId}`).then(setProviders).catch(() => {});
+    }
+  }, [contextId, verGenerales]);
 
   useEffect(refresh, [refresh, version]);
 
@@ -222,21 +236,18 @@ export default function ProvidersTab({ contexts, contextsById, version }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <button
-          className={`rounded-full px-3 py-1 text-xs font-medium ${!contextFilter ? "bg-accent text-white" : "bg-ink/5 text-ink-soft"}`}
-          onClick={() => setContextFilter("")}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${!verGenerales ? "bg-accent text-white" : "bg-ink/5 text-ink-soft"}`}
+          onClick={() => setVerGenerales(false)}
         >
-          Todos
+          De este negocio
         </button>
-        {contexts.map((c) => (
-          <button
-            key={c.id}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${String(c.id) === contextFilter ? "text-white" : "bg-ink/5 text-ink-soft"}`}
-            style={String(c.id) === contextFilter ? { backgroundColor: c.color } : {}}
-            onClick={() => setContextFilter(String(c.id) === contextFilter ? "" : String(c.id))}
-          >
-            {c.name}
-          </button>
-        ))}
+        <button
+          className={`rounded-full px-3 py-1 text-xs font-medium ${verGenerales ? "bg-accent text-white" : "bg-ink/5 text-ink-soft"}`}
+          onClick={() => setVerGenerales(true)}
+          title="Proveedores sin negocio asignado, compartidos entre todos"
+        >
+          Generales
+        </button>
         <div className="ml-auto">
           <Button onClick={() => setModal({})}>＋ Proveedor</Button>
         </div>
@@ -244,7 +255,9 @@ export default function ProvidersTab({ contexts, contextsById, version }) {
 
       {providers.length === 0 ? (
         <GlassCard className="p-10 text-center text-sm text-ink-soft">
-          Sin proveedores registrados. Agrega el primero para nunca perder su contacto.
+          {verGenerales
+            ? "No hay proveedores generales (sin negocio asignado)."
+            : "Sin proveedores en este negocio. Agrega el primero para nunca perder su contacto."}
         </GlassCard>
       ) : (
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
@@ -294,6 +307,7 @@ export default function ProvidersTab({ contexts, contextsById, version }) {
         open={!!modal}
         provider={modal?.provider}
         contexts={contexts}
+        defaultContextId={verGenerales ? "" : contextId}
         onClose={() => setModal(null)}
         onSaved={() => {
           setModal(null);

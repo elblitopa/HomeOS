@@ -5,20 +5,17 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import { fmtMoney, formatDateTime } from "../../lib/constants.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
-import ContentSection from "./ContentSection.jsx";
 
-const SECTIONS = [
-  { key: "crm", label: "CRM" },
-  { key: "contenido", label: "Contenido" },
-  { key: "competidores", label: "Competidores" },
-  { key: "mensajes", label: "Mensajes" },
-  { key: "docs", label: "Documentos" },
-  { key: "manual", label: "Manual" },
-];
+/** Las secciones "clasicas" del detalle de un negocio.
+ *
+ *  Vivieron dentro de la pestaña Negocios de Finanzas; ahora las monta
+ *  BusinessDetailPage. Cada una recibe contextId y se rasca con su propia
+ *  cola: fetch, modal y refresh locales.
+ */
 
 // ---------- CRM: finanzas filtradas del negocio ----------
 
-function CrmSection({ contextId, contextsById, version }) {
+export function CrmSection({ contextId, contextsById, version }) {
   const [summary, setSummary] = useState(null);
   const [txs, setTxs] = useState([]);
 
@@ -78,7 +75,7 @@ function CrmSection({ contextId, contextsById, version }) {
 
 // ---------- Competidores ----------
 
-function CompetitorsSection({ contextId }) {
+export function CompetitorsSection({ contextId }) {
   const [items, setItems] = useState([]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
@@ -215,7 +212,7 @@ function CompetitorsSection({ contextId }) {
 
 // ---------- Mensajes automatizados ----------
 
-function MessagesSection({ contextId }) {
+export function MessagesSection({ contextId }) {
   const [items, setItems] = useState([]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ title: "", body: "" });
@@ -307,7 +304,7 @@ function MessagesSection({ contextId }) {
 
 // ---------- Documentos ----------
 
-function DocsSection({ contextId }) {
+export function DocsSection({ contextId }) {
   const [docs, setDocs] = useState([]);
   const [busy, setBusy] = useState(false);
 
@@ -373,7 +370,7 @@ function DocsSection({ contextId }) {
 
 // ---------- Manual de procesos ----------
 
-function ManualSection({ contextId }) {
+export function ManualSection({ contextId }) {
   const [info, setInfo] = useState({ manual: "", notes: "" });
   const [saved, setSaved] = useState(false);
 
@@ -409,70 +406,6 @@ function ManualSection({ contextId }) {
       <div className="flex justify-end">
         <Button onClick={save}>{saved ? "✓ Guardado" : "Guardar"}</Button>
       </div>
-    </div>
-  );
-}
-
-// ---------- página ----------
-
-export default function BusinessTab({ contexts, contextsById, version }) {
-  const [contextId, setContextId] = useState(null);
-  const [section, setSection] = useState("crm");
-
-  useEffect(() => {
-    if (!contextId && contexts.length) setContextId(contexts[0].id);
-  }, [contexts, contextId]);
-
-  if (contexts.length === 0) {
-    return (
-      <GlassCard className="p-10 text-center text-sm text-ink-soft">
-        Crea tus negocios como <b>contextos</b> en Ajustes (ej. "Perfumes") y aquí verás su CRM,
-        competidores, mensajes, documentos y manual.
-      </GlassCard>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {contexts.map((c) => (
-          <button
-            key={c.id}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-              contextId === c.id ? "text-white" : "bg-ink/5 text-ink-soft hover:bg-accent-soft"
-            }`}
-            style={contextId === c.id ? { backgroundColor: c.color } : {}}
-            onClick={() => setContextId(c.id)}
-          >
-            {c.name}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-ink/10" />
-        <div className="flex gap-1 rounded-xl bg-ink/5 p-1">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => setSection(s.key)}
-              className={`rounded-lg px-3 py-1 text-xs font-medium transition ${
-                section === s.key ? "bg-surface shadow-sm" : "text-ink-soft"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {contextId && (
-        <>
-          {section === "crm" && <CrmSection contextId={contextId} contextsById={contextsById} version={version} />}
-          {section === "contenido" && <ContentSection contextId={contextId} />}
-          {section === "competidores" && <CompetitorsSection contextId={contextId} />}
-          {section === "mensajes" && <MessagesSection contextId={contextId} />}
-          {section === "docs" && <DocsSection contextId={contextId} />}
-          {section === "manual" && <ManualSection contextId={contextId} />}
-        </>
-      )}
     </div>
   );
 }

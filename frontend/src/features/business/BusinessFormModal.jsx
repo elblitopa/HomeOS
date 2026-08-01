@@ -16,7 +16,7 @@ const PALETA = [
  *  por contexto (tareas, transacciones, proveedores) pertenece al negocio
  *  sin volver a vincular nada.
  */
-export default function BusinessFormModal({ open, business, onClose, onSaved }) {
+export default function BusinessFormModal({ open, business, onClose, onSaved, onDeleted }) {
   const [form, setForm] = useState({ name: "", color: PALETA[0], banner_path: null });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -72,7 +72,9 @@ export default function BusinessFormModal({ open, business, onClose, onSaved }) 
       "documentos. Sus transacciones y tareas quedan sin etiqueta.";
     if (!confirm(aviso)) return;
     await apiDelete(`/api/contexts/${business.id}`);
-    onSaved();
+    // borrar no es guardar: el detalle necesita navegar fuera de la página
+    // del negocio que acaba de dejar de existir
+    (onDeleted || onSaved)();
     onClose();
   };
 
