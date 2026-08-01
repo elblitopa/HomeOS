@@ -44,7 +44,7 @@ function Rutinas({ rutinas, onCambiada }) {
   const [ocupada, setOcupada] = useState(null);
   if (!rutinas.length) return null;
 
-  const hechas = rutinas.filter((r) => r.done_today).length;
+  const hechas = rutinas.filter((r) => r.done).length;
 
   const marcar = async (r) => {
     if (ocupada) return; // sin dobles toques: descuadrarían el estado
@@ -75,22 +75,22 @@ function Rutinas({ rutinas, onCambiada }) {
             onClick={() => marcar(r)}
             disabled={ocupada === r.id}
             className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition disabled:opacity-50 ${
-              r.done_today
+              r.done
                 ? "border-ok/30 bg-ok/5"
                 : "border-glass-border bg-surface/50 hover:border-accent/40"
             }`}
           >
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs text-white transition ${
-                r.done_today ? "border-ok bg-ok" : "border-ink/20"
+                r.done ? "border-ok bg-ok" : "border-ink/20"
               }`}
             >
-              {r.done_today ? "✓" : ""}
+              {r.done ? "✓" : ""}
             </span>
             <span className="text-lg">{r.icon}</span>
             <span
               className={`flex-1 text-sm font-medium ${
-                r.done_today ? "text-ink-soft line-through" : ""
+                r.done ? "text-ink-soft line-through" : ""
               }`}
             >
               {r.name}

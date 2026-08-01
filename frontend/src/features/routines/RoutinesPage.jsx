@@ -5,13 +5,31 @@ import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import useCardSort from "../../hooks/useCardSort.js";
+import { dayKey } from "../../lib/calendarKinds.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
 
-const dayKey = (offset) => {
-  const d = new Date();
-  d.setDate(d.getDate() - offset);
-  return d.toISOString().slice(0, 10);
-};
+const hoyKey = () => dayKey(new Date());
+
+/** El día que cae N días de un lado o del otro, en llave local.
+ *
+ *  Se parte del mediodía y no de la medianoche: al sumar días sobre las 00:00,
+ *  un cambio de horario de verano puede dejar la fecha en el día anterior. */
+function corrido(clave, dias) {
+  const d = new Date(`${clave}T12:00`);
+  d.setDate(d.getDate() + dias);
+  return dayKey(d);
+}
+
+function etiquetaDia(clave) {
+  const hoy = hoyKey();
+  if (clave === hoy) return "Hoy";
+  if (clave === corrido(hoy, -1)) return "Ayer";
+  return new Date(`${clave}T12:00`).toLocaleDateString("es-MX", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
 
 const WEEKDAY_SHORT = ["D", "L", "M", "M", "J", "V", "S"];
 
@@ -68,11 +86,16 @@ export default function RoutinesPage() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ name: "", icon: "✅" });
 
+  // el día que se está palomeando; casi siempre hoy, pero se puede ir atrás
+  // para anotar lo que se olvidó en su momento
+  const [dia, setDia] = useState(hoyKey);
+  const esHoy = dia === hoyKey();
+
   const refresh = useCallback(() => {
-    apiGet("/api/routines").then(setRoutines).catch(() => {});
+    apiGet(`/api/routines?day=${dia}`).then(setRoutines).catch(() => {});
     apiGet("/api/routines/stats?days=30").then(setStats).catch(() => {});
     apiGet("/api/routines/logs?days=7").then(setWeekLogs).catch(() => {});
-  }, []);
+  }, [dia]);
 
   useEffect(refresh, [refresh]);
 
@@ -81,7 +104,7 @@ export default function RoutinesPage() {
   }, [modal]);
 
   const toggle = async (r) => {
-    await apiPost(`/api/routines/${r.id}/toggle`);
+    await apiPost(`/api/routines/${r.id}/toggle?day=${dia}`);
     refresh();
   };
 
@@ -124,11 +147,11 @@ export default function RoutinesPage() {
     refresh();
   };
 
-  const done = routines.filter((r) => r.done_today).length;
+  const done = routines.filter((r) => r.done).length;
   const total = routines.length;
 
   // matriz semanal: últimos 7 días (hoy al final)
-  const weekDays = Array.from({ length: 7 }, (_, i) => dayKey(6 - i));
+  const weekDays = Array.from({ length: 7 }, (_, i) => corrido(hoyKey(), i - 6));
   const logSet = new Set(weekLogs.map((l) => `${l.routine_id}|${l.date}`));
 
   // promedio semanal
@@ -147,14 +170,54 @@ export default function RoutinesPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="flex flex-col gap-4">
-          {/* checklist de hoy */}
-          <GlassCard className="p-5">
-            <div className="mb-3 flex items-baseline justify-between">
-              <h2 className="font-semibold">Hoy</h2>
-              <span className="text-2xl font-bold text-accent">
+          {/* checklist del día elegido */}
+          <GlassCard className={`p-5 ${esHoy ? "" : "ring-1 ring-amber-500/40"}`}>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1">
+                <button
+                  onClick={() => setDia(corrido(dia, -1))}
+                  className="shrink-0 rounded-lg px-2 py-1 text-lg text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+                  title="Día anterior"
+                >
+                  ‹
+                </button>
+                <h2 className="min-w-0 truncate font-semibold capitalize">{etiquetaDia(dia)}</h2>
+                <button
+                  onClick={() => setDia(corrido(dia, 1))}
+                  disabled={esHoy}
+                  className="shrink-0 rounded-lg px-2 py-1 text-lg text-ink-soft transition hover:bg-ink/5 hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+                  title="Día siguiente"
+                >
+                  ›
+                </button>
+              </div>
+              <span className="shrink-0 text-2xl font-bold text-accent">
                 {done}
                 <span className="text-sm font-medium text-ink-soft">/{total}</span>
               </span>
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                // max-w y no w-auto: inputCls trae w-full y, al ser las dos
+                // utilidades del mismo grupo, cual gana depende del orden en
+                // el CSS generado, no del orden aquí
+                className={`${inputCls} max-w-[11rem] py-1 text-sm`}
+                value={dia}
+                max={hoyKey()}
+                onChange={(e) => e.target.value && setDia(e.target.value)}
+              />
+              {!esHoy && (
+                <>
+                  <Button variant="ghost" onClick={() => setDia(hoyKey())}>
+                    Volver a hoy
+                  </Button>
+                  <span className="text-xs text-amber-600 dark:text-amber-500">
+                    Estás anotando un día pasado
+                  </span>
+                </>
+              )}
             </div>
             {routines.length === 0 ? (
               <p className="text-sm text-ink-soft">
@@ -169,7 +232,7 @@ export default function RoutinesPage() {
                     className={`flex items-center gap-1 rounded-xl border transition ${
                       draggingId === String(r.id) ? "opacity-60 ring-2 ring-accent" : ""
                     } ${
-                      r.done_today
+                      r.done
                         ? "border-ok/30 bg-ok/5"
                         : "border-glass-border bg-surface/50 hover:border-accent/40"
                     }`}
@@ -180,15 +243,15 @@ export default function RoutinesPage() {
                     >
                       <span
                         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs text-white transition ${
-                          r.done_today ? "border-ok bg-ok" : "border-ink/20"
+                          r.done ? "border-ok bg-ok" : "border-ink/20"
                         }`}
                       >
-                        {r.done_today ? "✓" : ""}
+                        {r.done ? "✓" : ""}
                       </span>
                       <span className="text-lg">{r.icon}</span>
                       <span
                         className={`flex-1 text-sm font-medium ${
-                          r.done_today ? "text-ink-soft line-through" : ""
+                          r.done ? "text-ink-soft line-through" : ""
                         }`}
                       >
                         {r.name}
@@ -238,7 +301,10 @@ export default function RoutinesPage() {
                 <div className="grid grid-cols-[1fr_repeat(7,24px)] items-center gap-1 text-[10px] text-ink-soft">
                   <span />
                   {weekDays.map((d) => (
-                    <span key={d} className="text-center">
+                    <span
+                      key={d}
+                      className={`text-center ${d === dia ? "font-bold text-accent" : ""}`}
+                    >
                       {WEEKDAY_SHORT[new Date(`${d}T12:00`).getDay()]}
                     </span>
                   ))}
@@ -251,10 +317,13 @@ export default function RoutinesPage() {
                     {weekDays.map((d) => {
                       const hit = logSet.has(`${r.id}|${d}`);
                       return (
-                        <span
+                        <button
                           key={d}
-                          className={`mx-auto h-4 w-4 rounded ${hit ? "bg-accent" : "bg-ink/8"}`}
-                          title={`${d}${hit ? " ✓" : ""}`}
+                          onClick={() => setDia(d)}
+                          className={`mx-auto h-4 w-4 rounded transition hover:ring-2 hover:ring-accent/50 ${
+                            hit ? "bg-accent" : "bg-ink/8"
+                          } ${d === dia ? "ring-2 ring-accent" : ""}`}
+                          title={`${etiquetaDia(d)}${hit ? " ✓" : ""} · clic para editar ese día`}
                         />
                       );
                     })}

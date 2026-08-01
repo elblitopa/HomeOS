@@ -27,16 +27,37 @@ def _today() -> str:
     return date.today().isoformat()
 
 
+def _dia(day: str | None) -> str:
+    """El date_key a usar: el que pidan, o hoy.
+
+    Se valida aqui porque date_key es texto libre en la tabla: sin esto, un
+    dia mal escrito no truena, guarda el check con una llave que despues no
+    empata con nada y el palomeado se pierde en silencio.
+    """
+    if not day:
+        return _today()
+    try:
+        return date.fromisoformat(day).isoformat()
+    except ValueError:
+        raise HTTPException(400, f"Fecha inválida: {day}. Se espera AAAA-MM-DD.")
+
+
 @router.get("")
-def list_routines(db: Session = Depends(get_db)):
+def list_routines(day: str | None = None, db: Session = Depends(get_db)):
+    """El checklist de un dia. Sin `day` es el de hoy.
+
+    Sirve para anotar en frio: si se te paso palomear ayer, pides ayer y lo
+    marcas, en vez de perder el dia.
+    """
+    date_key = _dia(day)
     routines = (
         db.query(Routine).filter(Routine.active == 1).order_by(Routine.sort_order, Routine.name).all()
     )
-    done_today = {
+    hechas = {
         log.routine_id
-        for log in db.query(RoutineLog).filter(RoutineLog.date_key == _today()).all()
+        for log in db.query(RoutineLog).filter(RoutineLog.date_key == date_key).all()
     }
-    return [{**r.to_dict(), "done_today": r.id in done_today} for r in routines]
+    return [{**r.to_dict(), "date": date_key, "done": r.id in hechas} for r in routines]
 
 
 @router.post("", status_code=201)
@@ -98,7 +119,7 @@ def toggle_routine(routine_id: int, day: str | None = None, db: Session = Depend
     routine = db.get(Routine, routine_id)
     if not routine:
         raise HTTPException(404, "Rutina no encontrada")
-    date_key = day or _today()
+    date_key = _dia(day)
     log = (
         db.query(RoutineLog)
         .filter(RoutineLog.routine_id == routine_id, RoutineLog.date_key == date_key)
