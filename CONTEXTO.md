@@ -11,26 +11,11 @@ Carpeta: `C:\Users\pablo\OneDrive\Documents\Proyectos\HomeOS`
 
 ## Estado del repo
 
-Todo comiteado. Las nueve tandas que estaban sueltas quedaron en ocho commits
-sobre `5c38935`, en el orden que imponen los imports:
-
-| Commit | Qué trae |
-|---|---|
-| `b000b9b` | Móvil: el fondo de luces se estiraba y se recortaba en iOS |
-| `1b1aa56` | Rutinas: acomodar el checklist arrastrando |
-| `e02c06d` | Miniaturas de las imágenes subidas |
-| `90a1886` | Finanzas: programados, cuenta predeterminada, filtros y PayPal |
-| `a343c3c` | Google Calendar: espejo de HomeOS hacia tu cuenta |
-| `a2e0f85` | Calendario: detalle de cualquier bloque y mover arrastrando |
-| `f563aab` | Inicio: la portada con saludo, frase del día e inbox |
-
-Más el último, que trae el build del frontend: `frontend/dist/` es un solo
-bundle y no se puede repartir entre commits sin rebuildear con código a medias.
-
-Programados, cuenta predeterminada, filtros de fecha y PayPal viajan en un solo
-commit porque están entretejidos en los mismos archivos (`finance.py`,
-`FinanceModals.jsx`, `ResumenTab.jsx`): separarlos habría dejado commits que no
-corren.
+Todo comiteado por temas; `frontend/dist/` viaja en su propio commit al final
+de cada tanda porque es un solo bundle que no se puede repartir. La última
+tanda separó Finanzas y Negocios en dos secciones (6 fases: backend de
+contextos/proyectos, backend de pagos, separación + índice, detalle,
+matriz de proyectos, y Pagos del negocio).
 
 ---
 
@@ -42,8 +27,9 @@ corren.
 | Apps (`/apps`) | Lanza los 5 proyectos, start/stop del .bat, estado por puerto |
 | Calendario | Vista Mes y Día. Junta eventos, Google, tareas, suscripciones, pagos, metas, notas, programados y transacciones. Click en cualquier bloque abre su detalle |
 | Tareas | Prioridades, contextos, fecha límite, timeline de notas y archivos |
-| Finanzas | Resumen, Transacciones, **Programados**, Categorías, Mensual, Presupuesto, Proveedores, Negocios, y Divisas aparte |
-| Rutinas | Checklist diario reordenable, matriz semanal, gráfica de 30 días |
+| Finanzas | Resumen, Transacciones, **Programados**, Categorías, Mensual, Presupuesto, y Divisas aparte |
+| **Negocios** (`/negocios`) | Tarjetas con banner, una por negocio → detalle con Proyectos (Tabla/Tablero/Calendario), Proveedores, Pagos, CRM, Contenido, Competidores, Mensajes, Documentos y Manual |
+| Rutinas | Checklist por día (se puede palomear cualquier fecha pasada), matriz semanal clicable, gráfica de 30 días |
 | Notas / Archivos / Ajustes | Texto y voz · biblioteca con previews · Google, semana, Discord, contextos, nombre y frases |
 
 ---
@@ -94,6 +80,20 @@ corren.
   y en la otra no, en silencio.
 - **`tarea` y `google` no pasan por el despachador**: la primera tiene su
   `TaskDetailModal`, el segundo ya viaja completo en la agenda.
+- **Un negocio ES un contexto con la palomita `is_business`** (más
+  `banner_path` y `sort_order` en `contexts`). Así todo lo que ya se etiqueta
+  por contexto pertenece al negocio sin duplicar el concepto. La palomita
+  solo decide si sale como tarjeta en `/negocios`; los endpoints no la
+  validan. Crear un negocio crea su contexto; se marca/desmarca en Ajustes.
+- **Los proyectos de negocio (`business_projects`) van aparte de los Todos**
+  a propósito: progreso de 3 estados (`sin_empezar|en_curso|terminado`),
+  prioridad P1-P3, área, estrategia y clientes. NO aparecen en el calendario
+  general. El kanban del tablero usa eventos de puntero (no DnD de HTML5,
+  que iOS ignora) — patrón de `useCardSort` con `[data-col]`.
+- **Deudas, suscripciones, programados y transacciones llevan `context_id` y
+  `provider_id`**, y los endpoints `/pay` y `/confirm` los propagan a la
+  `Transaction` que crean. De eso vive la sección Pagos del negocio (cuánto
+  debo a cada proveedor, en MXN vía `pending_amount_mxn`).
 - **PayPal no tiene API útil.** La suya (`/v2/pricing/quote-exchange-rates`) es
   para comercios elegibles con OAuth. Y no hace falta: PayPal usa el tipo de
   cambio del mercado con su margen adentro. Medido con dos cargos reales de
@@ -126,6 +126,12 @@ corren.
 - **La transacción de un cobro se crea con la fecha de hoy**, no con la fecha
   que vencía. Si se registra tarde, queda tarde.
 - **Nadie ha marcado una cuenta como predeterminada** todavía.
+- **Ningún contexto está marcado como negocio** todavía: `/negocios` sale
+  vacío hasta palomear Perfumes/ShopifyBot en Ajustes (los datos que ya
+  cuelgan de ellos aparecen solos al marcar). "Ideas" puede seguir de
+  contexto normal o borrarse a mano.
+- **Las deudas viejas no tienen negocio ni proveedor**: se les asigna
+  editándolas en Finanzas (selects nuevos del modal).
 - Idea suelta: marcar una suscripción como "esta siempre va por PayPal" para
   que la casilla venga prendida sola en vez de palomearla cada mes.
 - Fases futuras que se han mencionado: Notion sync, Matter (luces/enchufes),
