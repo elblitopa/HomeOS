@@ -156,6 +156,53 @@ class ContentIdea(Base):
         }
 
 
+class BusinessProject(Base):
+    """Proyecto/pendiente de un negocio (la matriz de proyectos).
+
+    Aparte de los Todos personales a propósito: aquí el progreso tiene tres
+    estados (no dos), y lleva área, estrategia y clientes, que en una tarea
+    personal no significan nada.
+    """
+
+    __tablename__ = "business_projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    context_id: Mapped[int] = mapped_column(
+        ForeignKey("contexts.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    priority: Mapped[str] = mapped_column(String, default="P2")  # P1 | P2 | P3
+    # sin_empezar | en_curso | terminado
+    progress: Mapped[str] = mapped_column(String, default="sin_empezar")
+    area: Mapped[str | None] = mapped_column(String, nullable=True)  # Marketing, Desarrollo…
+    due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    strategy: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clients: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+    def to_dict(self) -> dict:
+        days_left = None
+        if self.due_date:
+            days_left = (self.due_date.date() - datetime.now().date()).days
+        return {
+            "id": self.id,
+            "context_id": self.context_id,
+            "title": self.title,
+            "priority": self.priority,
+            "progress": self.progress,
+            "area": self.area,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "days_left": days_left,
+            "strategy": self.strategy,
+            "clients": self.clients,
+            "sort_order": self.sort_order,
+        }
+
+
 class BusinessInfo(Base):
     """Manual de procesos y notas generales por negocio."""
 

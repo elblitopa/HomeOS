@@ -9,6 +9,7 @@ from backend.models import (
     BizDoc,
     BizMessage,
     BusinessInfo,
+    BusinessProject,
     Competitor,
     ContentIdea,
     Provider,
@@ -261,6 +262,102 @@ def delete_content(idea_id: int, db: Session = Depends(get_db)):
     if not idea:
         raise HTTPException(404, "Idea no encontrada")
     db.delete(idea)
+    db.commit()
+    return {"deleted": True}
+
+
+# ---------- proyectos (la matriz de pendientes del negocio) ----------
+
+PROJECT_PRIORITIES = {"P1", "P2", "P3"}
+PROJECT_PROGRESS = {"sin_empezar", "en_curso", "terminado"}
+
+
+class ProjectPayload(BaseModel):
+    context_id: int
+    title: str = Field(min_length=1)
+    priority: str = "P2"
+    progress: str = "sin_empezar"
+    area: str | None = None
+    due_date: datetime | None = None
+    strategy: str | None = None
+    clients: str | None = None
+    sort_order: int = 0
+
+
+class ProjectProgressPayload(BaseModel):
+    progress: str
+
+
+class ProjectReorderPayload(BaseModel):
+    ids: list[int]
+
+
+def _validar_proyecto(payload: ProjectPayload) -> None:
+    if payload.priority not in PROJECT_PRIORITIES:
+        raise HTTPException(400, "Prioridad inválida: usa P1, P2 o P3")
+    if payload.progress not in PROJECT_PROGRESS:
+        raise HTTPException(400, "Progreso inválido")
+
+
+@router.get("/projects")
+def list_projects(context_id: int, db: Session = Depends(get_db)):
+    q = db.query(BusinessProject).filter(BusinessProject.context_id == context_id)
+    items = q.order_by(BusinessProject.sort_order, BusinessProject.created_at).all()
+    return [p.to_dict() for p in items]
+
+
+@router.post("/projects", status_code=201)
+def create_project(payload: ProjectPayload, db: Session = Depends(get_db)):
+    _validar_proyecto(payload)
+    proyecto = BusinessProject(**payload.model_dump())
+    db.add(proyecto)
+    db.commit()
+    return proyecto.to_dict()
+
+
+@router.put("/projects/{project_id}")
+def update_project(project_id: int, payload: ProjectPayload, db: Session = Depends(get_db)):
+    proyecto = db.get(BusinessProject, project_id)
+    if not proyecto:
+        raise HTTPException(404, "Proyecto no encontrado")
+    _validar_proyecto(payload)
+    for key, value in payload.model_dump().items():
+        setattr(proyecto, key, value)
+    db.commit()
+    return proyecto.to_dict()
+
+
+@router.post("/projects/{project_id}/progress")
+def move_project(project_id: int, payload: ProjectProgressPayload, db: Session = Depends(get_db)):
+    """Mover de columna (drag & drop del tablero)."""
+    proyecto = db.get(BusinessProject, project_id)
+    if not proyecto:
+        raise HTTPException(404, "Proyecto no encontrado")
+    if payload.progress not in PROJECT_PROGRESS:
+        raise HTTPException(400, "Progreso inválido")
+    proyecto.progress = payload.progress
+    db.commit()
+    return proyecto.to_dict()
+
+
+@router.post("/projects/reorder")
+def reorder_projects(payload: ProjectReorderPayload, db: Session = Depends(get_db)):
+    """Guarda el acomodo de la matriz (drag & drop)."""
+    proyectos = {p.id: p for p in db.query(BusinessProject).all()}
+    for index, project_id in enumerate(payload.ids):
+        proyecto = proyectos.get(project_id)
+        if proyecto:
+            proyecto.sort_order = index
+    db.commit()
+    return {"ordered": len(payload.ids)}
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: int, db: Session = Depends(get_db)):
+    proyecto = db.get(BusinessProject, project_id)
+    if not proyecto:
+        raise HTTPException(404, "Proyecto no encontrado")
+    db.delete(proyecto)
     db.commit()
     return {"deleted": True}
 

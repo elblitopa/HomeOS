@@ -51,6 +51,17 @@ MIGRATIONS = [
     ("recurring_payments", "type", "type VARCHAR DEFAULT 'egreso'"),
     ("accounts", "is_default", "is_default INTEGER DEFAULT 0"),
     ("transactions", "via_paypal", "via_paypal BOOLEAN DEFAULT 0"),
+    # negocio = contexto con palomita; el banner y el orden son de su tarjeta
+    ("contexts", "is_business", "is_business INTEGER DEFAULT 0"),
+    ("contexts", "banner_path", "banner_path VARCHAR"),
+    ("contexts", "sort_order", "sort_order INTEGER DEFAULT 0"),
+    # pagos a terceros: a quien pertenece cada deuda/movimiento
+    ("recurring_payments", "context_id", "context_id INTEGER REFERENCES contexts(id) ON DELETE SET NULL"),
+    ("recurring_payments", "provider_id", "provider_id INTEGER REFERENCES providers(id) ON DELETE SET NULL"),
+    ("scheduled_transactions", "provider_id", "provider_id INTEGER REFERENCES providers(id) ON DELETE SET NULL"),
+    ("transactions", "provider_id", "provider_id INTEGER REFERENCES providers(id) ON DELETE SET NULL"),
+    ("subscriptions", "context_id", "context_id INTEGER REFERENCES contexts(id) ON DELETE SET NULL"),
+    ("subscriptions", "provider_id", "provider_id INTEGER REFERENCES providers(id) ON DELETE SET NULL"),
 ]
 
 # Columnas que dejaron de usarse (necesita SQLite 3.35+, incluido desde Python 3.11)
