@@ -144,6 +144,10 @@ class Transaction(Base):
     # el cobro paso por PayPal, que convierte con su propio tipo de cambio
     # (bastante peor que el del mercado) en vez del que tenemos en Divisas
     via_paypal: Mapped[bool] = mapped_column(Boolean, default=False)
+    # a que proveedor se le pago, para las cuentas por pagar del negocio
+    provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("providers.id", ondelete="SET NULL"), nullable=True
+    )
     attachment_path: Mapped[str | None] = mapped_column(String, nullable=True)
     attachment_name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -159,6 +163,7 @@ class Transaction(Base):
             "to_account_id": self.to_account_id,
             "to_goal_id": self.to_goal_id,
             "context_id": self.context_id,
+            "provider_id": self.provider_id,
             "occurred_at": self.occurred_at.isoformat(),
             "fx_rate": self.fx_rate,
             "amount_mxn": round(self.amount * (self.fx_rate or 1.0), 2),
@@ -222,6 +227,14 @@ class RecurringPayment(Base):
     account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
+    # a que negocio pertenece la deuda y con que proveedor es (opcionales):
+    # con esto la seccion Pagos del negocio sabe cuanto se le debe a quien
+    context_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contexts.id", ondelete="SET NULL"), nullable=True
+    )
+    provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("providers.id", ondelete="SET NULL"), nullable=True
+    )
     next_due: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -242,9 +255,14 @@ class RecurringPayment(Base):
             "installments_paid": self.installments_paid,
             "paid_amount": self.paid_amount,
             "pending_amount": pending,
+            # en MXN para que el agrupado "debo a cada proveedor" pueda sumar
+            # deudas pactadas en divisas distintas sin recalcular en el cliente
+            "pending_amount_mxn": round(pending * rate, 2),
             "frequency": self.frequency,
             "category_id": self.category_id,
             "account_id": self.account_id,
+            "context_id": self.context_id,
+            "provider_id": self.provider_id,
             "next_due": self.next_due.isoformat() if self.next_due else None,
             "days_left": days_left,
             "progress": min(1.0, self.paid_amount / self.total_amount) if self.total_amount else 0,
@@ -267,6 +285,14 @@ class Subscription(Base):
     account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
+    # negocio y proveedor opcionales, para que el cobro herede a quien
+    # pertenece cuando /pay crea la transaccion
+    context_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contexts.id", ondelete="SET NULL"), nullable=True
+    )
+    provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("providers.id", ondelete="SET NULL"), nullable=True
+    )
     next_due: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
@@ -283,6 +309,8 @@ class Subscription(Base):
             "period": self.period,
             "category_id": self.category_id,
             "account_id": self.account_id,
+            "context_id": self.context_id,
+            "provider_id": self.provider_id,
             "next_due": self.next_due.isoformat() if self.next_due else None,
             "days_left": days_left,
         }
@@ -325,6 +353,10 @@ class ScheduledTransaction(Base):
     context_id: Mapped[int | None] = mapped_column(
         ForeignKey("contexts.id", ondelete="SET NULL"), nullable=True
     )
+    # a quien se le va a pagar, para las cuentas por pagar del negocio
+    provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("providers.id", ondelete="SET NULL"), nullable=True
+    )
 
     scheduled_for: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     # aplazar no es un estado: mueve la fecha y sigue pendiente
@@ -361,6 +393,7 @@ class ScheduledTransaction(Base):
             "to_account_id": self.to_account_id,
             "to_goal_id": self.to_goal_id,
             "context_id": self.context_id,
+            "provider_id": self.provider_id,
             "scheduled_for": self.scheduled_for.isoformat(),
             "status": self.status,
             "days_left": days_left,

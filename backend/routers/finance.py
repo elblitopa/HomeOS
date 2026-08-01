@@ -204,6 +204,7 @@ class TransactionPayload(BaseModel):
     to_account_id: int | None = None
     to_goal_id: int | None = None
     context_id: int | None = None
+    provider_id: int | None = None
     occurred_at: datetime | None = None
     attachment_path: str | None = None
     attachment_name: str | None = None
@@ -366,6 +367,9 @@ class RecurringPayload(BaseModel):
     frequency: str = "mensual"
     category_id: int | None = None
     account_id: int | None = None
+    # de que negocio es la deuda y con que proveedor (para Pagos del negocio)
+    context_id: int | None = None
+    provider_id: int | None = None
     next_due: datetime | None = None
 
 
@@ -418,9 +422,12 @@ def _monto_final(datos: "CobroPayload | None", item_currency: str,
 
 
 @router.get("/recurring")
-def list_recurring(db: Session = Depends(get_db)):
+def list_recurring(context_id: int | None = None, db: Session = Depends(get_db)):
     rates = {r.code: r.rate_to_mxn for r in db.query(ExchangeRate).all()}
-    items = db.query(RecurringPayment).order_by(RecurringPayment.next_due).all()
+    q = db.query(RecurringPayment)
+    if context_id:
+        q = q.filter(RecurringPayment.context_id == context_id)
+    items = q.order_by(RecurringPayment.next_due).all()
     return [r.to_dict(rates.get(r.currency or BASE_CURRENCY, 1.0)) for r in items]
 
 
@@ -478,6 +485,10 @@ def pay_recurring(item_id: int, payload: CobroPayload | None = None,
                 type="ingreso" if es_ingreso else "egreso",
                 category_id=item.category_id,
                 account_id=item.account_id,
+                # el movimiento hereda a quien pertenece la deuda, para que
+                # aparezca en el CRM y en Pagos del negocio sin re-etiquetar
+                context_id=item.context_id,
+                provider_id=item.provider_id,
                 occurred_at=datetime.now(),
                 fx_rate=acc_rate,
                 via_paypal=paypal,
@@ -510,6 +521,8 @@ class SubscriptionPayload(BaseModel):
     period: str = "mensual"
     category_id: int | None = None
     account_id: int | None = None
+    context_id: int | None = None
+    provider_id: int | None = None
     next_due: datetime | None = None
 
 
@@ -564,6 +577,8 @@ def pay_subscription(item_id: int, payload: CobroPayload | None = None,
                 type="egreso",
                 category_id=item.category_id,
                 account_id=item.account_id,
+                context_id=item.context_id,
+                provider_id=item.provider_id,
                 occurred_at=datetime.now(),
                 fx_rate=acc_rate,
                 via_paypal=paypal,
@@ -597,6 +612,7 @@ class ScheduledPayload(BaseModel):
     to_account_id: int | None = None
     to_goal_id: int | None = None
     context_id: int | None = None
+    provider_id: int | None = None
     scheduled_for: datetime
     attachment_path: str | None = None
     attachment_name: str | None = None
@@ -749,6 +765,7 @@ def confirm_scheduled(item_id: int, payload: ConfirmPayload | None = None,
         to_account_id=item.to_account_id,
         to_goal_id=item.to_goal_id,
         context_id=item.context_id,
+        provider_id=item.provider_id,
         occurred_at=cuando,
         fx_rate=acc_rate,
         via_paypal=paypal,
