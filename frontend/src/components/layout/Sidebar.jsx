@@ -10,7 +10,8 @@ const NAV = [
   { to: "/", label: "Inicio", icon: "🏠", end: true },
   { to: "/calendario", label: "Calendario", icon: "📅" },
   { to: "/tareas", label: "Tareas", icon: "✅" },
-  { to: "/finanzas", label: "Finanzas & Negocios", short: "Finanzas", icon: "💼" },
+  { to: "/finanzas", label: "Finanzas", icon: "💰" },
+  { to: "/negocios", label: "Negocios", icon: "💼" },
   { to: "/apps", label: "Apps", icon: "🚀" },
   { to: "/rutinas", label: "Rutinas", icon: "🔁" },
   { to: "/notas", label: "Notas", icon: "📝" },
@@ -51,7 +52,11 @@ function MobileNav() {
   const location = useLocation();
   const main = NAV.filter((n) => MOBILE_MAIN.includes(n.to));
   const extra = NAV.filter((n) => !MOBILE_MAIN.includes(n.to));
-  const extraActive = extra.some((n) => n.to === location.pathname);
+  // el prefijo tambien cuenta: /negocios/5 debe marcar "Más" como activo,
+  // igual que NavLink marca el enlace en desktop
+  const extraActive = extra.some(
+    (n) => n.to === location.pathname || location.pathname.startsWith(n.to + "/")
+  );
 
   return (
     <div className="md:hidden">

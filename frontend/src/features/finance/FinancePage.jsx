@@ -8,10 +8,10 @@ import ScheduledTab from "./ScheduledTab.jsx";
 import CategoriesTab from "./CategoriesTab.jsx";
 import MonthlyTab from "./MonthlyTab.jsx";
 import BudgetTab from "./BudgetTab.jsx";
-import ProvidersTab from "./ProvidersTab.jsx";
-import BusinessTab from "./BusinessTab.jsx";
 import DivisasPanel from "../divisas/DivisasPanel.jsx";
 
+// Proveedores y Negocios vivieron aquí como pestañas; ahora son la sección
+// Negocios (/negocios), con una página por negocio.
 const TABS = [
   { key: "resumen", label: "Resumen" },
   { key: "transacciones", label: "Transacciones" },
@@ -19,8 +19,6 @@ const TABS = [
   { key: "categorias", label: "Categorías" },
   { key: "mensual", label: "Mensual" },
   { key: "presupuesto", label: "Presupuesto" },
-  { key: "proveedores", label: "Proveedores" },
-  { key: "negocios", label: "Negocios" },
 ];
 
 // grupo aparte: no es parte del tracker, es la referencia de tipos de cambio
@@ -46,7 +44,7 @@ export default function FinancePage() {
 
   return (
     <div className="p-4 md:p-8">
-      <TopBar title="Finanzas & Negocios" />
+      <TopBar title="Finanzas" />
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1 rounded-2xl bg-ink/5 p-1">
@@ -84,8 +82,6 @@ export default function FinancePage() {
       {tab === "categorias" && <CategoriesTab {...shared} />}
       {tab === "mensual" && <MonthlyTab {...shared} />}
       {tab === "presupuesto" && <BudgetTab {...shared} />}
-      {tab === "proveedores" && <ProvidersTab {...shared} />}
-      {tab === "negocios" && <BusinessTab {...shared} />}
       {tab === "divisas" && <DivisasPanel {...shared} />}
     </div>
   );

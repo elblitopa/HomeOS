@@ -125,10 +125,29 @@ export default function SettingsPage() {
   };
 
   const removeContext = async (ctx) => {
-    if (!confirm(`¿Eliminar el contexto "${ctx.name}"? Las tareas y eventos quedan sin contexto.`))
-      return;
+    const aviso = ctx.is_business
+      ? `¿Eliminar el negocio "${ctx.name}"?\n\nSe borran también sus proyectos, ` +
+        "contenido, competidores, mensajes y documentos. Tareas y transacciones " +
+        "quedan sin etiqueta."
+      : `¿Eliminar el contexto "${ctx.name}"? Las tareas y eventos quedan sin contexto.`;
+    if (!confirm(aviso)) return;
     try {
       await apiDelete(`/api/contexts/${ctx.id}`);
+      refresh();
+    } catch (e) {
+      setCtxError(e.message);
+    }
+  };
+
+  const toggleBusiness = async (ctx) => {
+    setCtxError(null);
+    try {
+      // nombre y color van porque el PUT los pide; la palomita es lo que cambia
+      await apiPut(`/api/contexts/${ctx.id}`, {
+        name: ctx.name,
+        color: ctx.color,
+        is_business: !ctx.is_business,
+      });
       refresh();
     } catch (e) {
       setCtxError(e.message);
@@ -286,6 +305,7 @@ export default function SettingsPage() {
           <h2 className="mb-1 font-semibold">Contextos</h2>
           <p className="mb-3 text-sm text-ink-soft">
             Tus vistas para filtrar tareas y eventos: Personal, cada negocio, cada proyecto.
+            Los marcados con 💼 aparecen como tarjeta en la sección Negocios.
           </p>
 
           <div className="mb-4 flex flex-col gap-2">
@@ -296,6 +316,18 @@ export default function SettingsPage() {
               >
                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.color }} />
                 <span className="flex-1 text-sm font-medium">{c.name}</span>
+                <label
+                  className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-soft"
+                  title="Los negocios salen como tarjeta en la sección Negocios"
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!c.is_business}
+                    onChange={() => toggleBusiness(c)}
+                    className="h-3.5 w-3.5 accent-[#2383e2]"
+                  />
+                  💼 Negocio
+                </label>
                 <button
                   className="text-sm text-ink-soft transition hover:text-err"
                   onClick={() => removeContext(c)}
