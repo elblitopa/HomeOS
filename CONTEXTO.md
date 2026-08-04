@@ -12,10 +12,9 @@ Carpeta: `C:\Users\pablo\OneDrive\Documents\Proyectos\HomeOS`
 ## Estado del repo
 
 Todo comiteado por temas; `frontend/dist/` viaja en su propio commit al final
-de cada tanda porque es un solo bundle que no se puede repartir. La última
-tanda separó Finanzas y Negocios en dos secciones (6 fases: backend de
-contextos/proyectos, backend de pagos, separación + índice, detalle,
-matriz de proyectos, y Pagos del negocio).
+de cada tanda porque es un solo bundle que no se puede repartir. Última tanda:
+la Agenda de eventos de Negocios (vista de tarjetas del detalle, sección
+Agenda con 3 vistas, MonthGrid compartido, kind "agenda" en el calendario).
 
 ---
 
@@ -28,7 +27,7 @@ matriz de proyectos, y Pagos del negocio).
 | Calendario | Vista Mes y Día. Junta eventos, Google, tareas, suscripciones, pagos, metas, notas, programados y transacciones. Click en cualquier bloque abre su detalle |
 | Tareas | Prioridades, contextos, fecha límite, timeline de notas y archivos |
 | Finanzas | Resumen, Transacciones, **Programados**, Categorías, Mensual, Presupuesto, y Divisas aparte |
-| **Negocios** (`/negocios`) | Tarjetas con banner, una por negocio → detalle con Proyectos (Tabla/Tablero/Calendario), Proveedores, Pagos, CRM, Contenido, Competidores, Mensajes, Documentos y Manual |
+| **Negocios** (`/negocios`) | Tarjetas con banner, una por negocio → detalle (en tabs o tarjetas con banner por sección) con Proyectos (Tabla/Tablero/Calendario), **Agenda** (eventos de clientes, opcional por negocio), Proveedores, Pagos, CRM, Contenido, Competidores, Mensajes, Documentos y Manual |
 | Rutinas | Checklist por día (se puede palomear cualquier fecha pasada), matriz semanal clicable, gráfica de 30 días |
 | Notas / Archivos / Ajustes | Texto y voz · biblioteca con previews · Google, semana, Discord, contextos, nombre y frases |
 
@@ -94,6 +93,18 @@ matriz de proyectos, y Pagos del negocio).
   `provider_id`**, y los endpoints `/pay` y `/confirm` los propagan a la
   `Transaction` que crean. De eso vive la sección Pagos del negocio (cuánto
   debo a cada proveedor, en MXN vía `pending_amount_mxn`).
+- **La Agenda de eventos (`business_events`) es una sección opcional por
+  negocio** (`contexts.has_agenda`), no un framework de secciones — decisión
+  explícita del usuario, pensada para Renta Bocinas. Reservado = anticipo
+  (`deposit`) > 0, derivado en `to_dict`. El catálogo de renta y los banners
+  por sección viven en `business_info` (JSON, `agenda_options` con siembra
+  virtual: None responde las 5 default sin persistir). El PUT de info es
+  parcial (`exclude_unset`): cada sección guarda SOLO lo suyo.
+- **Los eventos agendados sí van al calendario general** como kind "agenda"
+  (🎉 rosa), con join a `has_agenda == 1`: apagar la palomita los oculta sin
+  borrar. Movibles con drag conservando duración. La grilla mensual chica es
+  `components/ui/MonthGrid.jsx`, compartida por Proyectos y Agenda (la de
+  CalendarPage sigue aparte a propósito: es monolítica).
 - **PayPal no tiene API útil.** La suya (`/v2/pricing/quote-exchange-rates`) es
   para comercios elegibles con OAuth. Y no hace falta: PayPal usa el tipo de
   cambio del mercado con su margen adentro. Medido con dos cargos reales de
@@ -126,10 +137,16 @@ matriz de proyectos, y Pagos del negocio).
 - **La transacción de un cobro se crea con la fecha de hoy**, no con la fecha
   que vencía. Si se registra tarde, queda tarde.
 - **Nadie ha marcado una cuenta como predeterminada** todavía.
-- **Ningún contexto está marcado como negocio** todavía: `/negocios` sale
-  vacío hasta palomear Perfumes/ShopifyBot en Ajustes (los datos que ya
-  cuelgan de ellos aparecen solos al marcar). "Ideas" puede seguir de
-  contexto normal o borrarse a mano.
+- **Solo "Renta Bocinas" está marcado como negocio** (con Agenda prendida);
+  Perfumes/ShopifyBot siguen sin palomear en Ajustes (sus datos aparecen
+  solos al marcar). "Ideas" puede seguir de contexto normal o borrarse.
+- ⚠️ **El nombre "Renta Bocinas" es una reconstrucción**: un PUT de prueba
+  renombró por accidente el negocio que el usuario creó el 2 de agosto (id 5,
+  estaba vacío). Si se llamaba distinto o tenía otro color, corregirlo en
+  el modal de editar.
+- **El chip "Agenda" del calendario** puede salir apagado por filtros
+  guardados viejos; se prende una vez y se queda (igual que pasó con
+  "Programados").
 - **Las deudas viejas no tienen negocio ni proveedor**: se les asigna
   editándolas en Finanzas (selects nuevos del modal).
 - Idea suelta: marcar una suscripción como "esta siempre va por PayPal" para
