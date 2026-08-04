@@ -3,6 +3,7 @@ import { apiGet, apiPut } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import { inputCls } from "../todos/TaskFormModal.jsx";
+import AgendaCalendar from "./AgendaCalendar.jsx";
 import AgendaCards from "./AgendaCards.jsx";
 import AgendaEventModal from "./AgendaEventModal.jsx";
 import AgendaTable from "./AgendaTable.jsx";
@@ -86,9 +87,7 @@ export default function AgendaSection({ contextId }) {
 
       {vista === "tabla" && <AgendaTable items={eventos} onOpen={onOpen} />}
       {vista === "tarjetas" && <AgendaCards items={eventos} onOpen={onOpen} />}
-      {vista === "calendario" && (
-        <p className="text-sm text-ink-soft">La vista de calendario llega en la siguiente fase.</p>
-      )}
+      {vista === "calendario" && <AgendaCalendar items={eventos} onOpen={onOpen} />}
 
       <AgendaEventModal
         open={!!modal}
