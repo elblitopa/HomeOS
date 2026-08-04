@@ -13,6 +13,8 @@ from backend.database import get_db
 from backend.models import (
     BASE_CURRENCY,
     Account,
+    BusinessEvent,
+    Context,
     Event,
     ExchangeRate,
     Goal,
@@ -34,7 +36,7 @@ router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
 KINDS = [
     "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota",
-    "programado", "transaccion",
+    "programado", "agenda", "transaccion",
 ]
 
 
@@ -165,6 +167,28 @@ def agenda(
                 f"{signo}{_money(p.amount, p.currency or BASE_CURRENCY)} · por confirmar",
                 p.context_id, {"type": p.type})
 
+    if "agenda" in wanted:
+        # eventos de clientes de los negocios con Agenda prendida: si el
+        # negocio la apaga, sus eventos dejan de salir aqui sin borrarse
+        q = (
+            db.query(BusinessEvent)
+            .join(Context, Context.id == BusinessEvent.context_id)
+            .filter(
+                Context.has_agenda == 1,
+                BusinessEvent.start >= desde,
+                BusinessEvent.start < hasta,
+            )
+        )
+        for ev in q:
+            partes = [_money(ev.amount)]
+            if ev.municipality:
+                partes.append(ev.municipality)
+            partes.append("reservado" if (ev.deposit or 0) > 0 else "sin anticipo")
+            add("agenda", ev.id, ev.client_name, ev.start, " · ".join(partes),
+                ev.context_id,
+                {"end": ev.end.isoformat() if ev.end else None,
+                 "reserved": (ev.deposit or 0) > 0})
+
     if "transaccion" in wanted:
         cuentas = {a.id: a for a in db.query(Account).all()}
         q = db.query(Transaction).filter(
@@ -184,7 +208,7 @@ def agenda(
 
 # tipos que se pueden arrastrar a otro dia. Las suscripciones/pagos son fechas
 # recurrentes calculadas y las transacciones/notas son historial: no se mueven.
-MOVABLE = {"evento", "tarea", "google", "meta", "programado"}
+MOVABLE = {"evento", "tarea", "google", "meta", "programado", "agenda"}
 
 
 class MovePayload(BaseModel):
@@ -243,6 +267,17 @@ def move_item(payload: MovePayload, tareas: BackgroundTasks, db: Session = Depen
         p.scheduled_for = mismo_horario(p.scheduled_for)
         db.commit()
         return {"moved": True, "date": p.scheduled_for.isoformat()}
+
+    if kind == "agenda":
+        ev = db.get(BusinessEvent, int(payload.ref_id))
+        if not ev:
+            raise HTTPException(404, "Evento de agenda no encontrado")
+        delta = mismo_horario(ev.start) - ev.start
+        ev.start = ev.start + delta
+        if ev.end:
+            ev.end = ev.end + delta  # conserva la duracion
+        db.commit()
+        return {"moved": True, "date": ev.start.isoformat()}
 
     # google: el evento no vive aqui, asi que el frontend manda su horario
     # actual y solo se recorre el dia via PATCH (el resto no se toca)
@@ -669,6 +704,43 @@ def _detalle_pago(db: Session, ref_id: int, cuando: datetime | None) -> dict | N
     )
 
 
+def _detalle_agenda(db: Session, ref_id: int, cuando: datetime | None) -> dict | None:
+    ev = db.get(BusinessEvent, ref_id)
+    if not ev:
+        return None
+    negocio = db.get(Context, ev.context_id)
+    reservado = (ev.deposit or 0) > 0
+    restante = max(0.0, (ev.amount or 0) - (ev.deposit or 0))
+    return _sobre(
+        "agenda", ev.id, ev.client_name, ev.start,
+        context_id=ev.context_id,
+        amount=_dinero(ev.amount, BASE_CURRENCY, "+"),
+        link=ev.place_url,
+        badges=[
+            _badge(f"Reservado ${ev.deposit:,.0f}" if reservado else "Sin anticipo",
+                   "ok" if reservado else "neutral"),
+            _badge(negocio.name if negocio else None, "accent"),
+        ],
+        fields=[
+            _campo("Teléfono", ev.phone),
+            _campo("Empieza", ev.start.isoformat(), "fecha"),
+            _campo("Termina", ev.end.isoformat() if ev.end else None, "fecha"),
+            _campo("Lugar", ev.place, hint=ev.municipality),
+            _campo("Municipio", ev.municipality if not ev.place else None),
+            _campo("Renta", ", ".join(ev.rentals or []) or None),
+            _campo("Anticipo", ev.deposit if reservado else None, "dinero",
+                   currency=BASE_CURRENCY),
+            _campo("Restante", restante if reservado else None, "dinero",
+                   currency=BASE_CURRENCY),
+            _campo("Comentarios", ev.comments, "multilinea"),
+        ],
+        media=[{"role": "banner", "path": ev.image_path, "name": ev.client_name}]
+        if ev.image_path else [],
+        actions=[{"id": "ver_en_negocio", "label": "Ver en el negocio", "tone": "ghost"}],
+        data=ev.to_dict(),
+    )
+
+
 RESOLVERS.update({
     "evento": _detalle_evento,
     "nota": _detalle_nota,
@@ -677,6 +749,7 @@ RESOLVERS.update({
     "programado": _detalle_programado,
     "suscripcion": _detalle_suscripcion,
     "pago": _detalle_pago,
+    "agenda": _detalle_agenda,
 })
 
 

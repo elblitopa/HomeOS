@@ -32,7 +32,8 @@ MAX_LARGO_FRASE = 240
 
 # lo que se ve por defecto: todo menos las transacciones, que son muchas
 DEFAULT_KINDS = [
-    "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota", "programado",
+    "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota",
+    "programado", "agenda",
 ]
 
 DEFAULT_COLORS = {
@@ -44,6 +45,7 @@ DEFAULT_COLORS = {
     "meta": "#f59e0b",
     "nota": "#6b6b70",
     "programado": "#0b7285",
+    "agenda": "#e64980",
     "transaccion": "#3b5bdb",
 }
 

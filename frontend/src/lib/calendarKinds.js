@@ -16,6 +16,9 @@ export const KINDS = [
   { key: "meta", label: "Metas", icon: "🎯", color: "#f59e0b", on: true },
   { key: "nota", label: "Notas", icon: "📝", color: "#6b6b70", on: true },
   { key: "programado", label: "Programados", icon: "🗓️", color: "#0b7285", on: true },
+  // OJO: los filtros guardados de antes no incluyen kinds nuevos, asi que el
+  // chip de un tipo recien agregado sale apagado hasta prenderlo una vez
+  { key: "agenda", label: "Agenda", icon: "🎉", color: "#e64980", on: true },
   { key: "transaccion", label: "Transacciones", icon: "💸", color: "#3b5bdb", on: false },
 ];
 
@@ -23,7 +26,7 @@ export const KIND = Object.fromEntries(KINDS.map((k) => [k.key, k]));
 export const COLORES_BASE = Object.fromEntries(KINDS.map((k) => [k.key, k.color]));
 
 // tipos que se pueden arrastrar a otro dia (los recurrentes y el historial no)
-export const MOVABLE = new Set(["evento", "tarea", "google", "meta", "programado"]);
+export const MOVABLE = new Set(["evento", "tarea", "google", "meta", "programado", "agenda"]);
 
 const pad = (n) => String(n).padStart(2, "0");
 

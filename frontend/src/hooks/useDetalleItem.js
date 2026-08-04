@@ -130,6 +130,12 @@ export default function useDetalleItem({
       }
       if (id === "ver_en_finanzas") return navigate("/finanzas");
       if (id === "ver_en_notas") return navigate("/notas");
+      // explicito ANTES del fallthrough de abajo: una accion desconocida
+      // acaba en el modal de finanzas, que aqui no pinta nada
+      if (id === "ver_en_negocio") {
+        const ctx = detalle?.context_id ?? item.context_id;
+        return navigate(ctx ? `/negocios/${ctx}` : "/negocios");
+      }
 
       // acciones directas, sin formulario de por medio
       if (id === "cancelar") {
