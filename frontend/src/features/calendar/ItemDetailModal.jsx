@@ -3,6 +3,7 @@ import { apiGet } from "../../api/client.js";
 import Adjunto from "../../components/ui/Adjunto.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
+import TelefonoCliente from "../../components/ui/TelefonoCliente.jsx";
 import { fmtMoney, formatDateTime } from "../../lib/constants.js";
 
 const TONOS = {
@@ -21,11 +22,21 @@ const soloFecha = (iso) =>
   });
 
 function Fila({ campo }) {
-  const { label, type, value, hint, icon, color, currency } = campo;
+  const { label, type, value, hint, icon, color, currency, url } = campo;
 
   const valor = () => {
     if (type === "dinero") return fmtMoney(value, currency);
     if (type === "fecha") return formatDateTime(value);
+    // link: el valor es el texto visible y url a dónde lleva (ej. maps)
+    if (type === "link") {
+      return (
+        <a href={url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+          {value} 🔗
+        </a>
+      );
+    }
+    // telefono: abre el menú de WhatsApp / Llamar (Llamar solo en el celular)
+    if (type === "telefono") return <TelefonoCliente phone={value} />;
     if (type === "progreso") {
       return (
         <span className="flex items-center justify-end gap-2">

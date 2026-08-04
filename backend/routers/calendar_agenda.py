@@ -736,10 +736,14 @@ def _detalle_agenda(db: Session, ref_id: int, cuando: datetime | None) -> dict |
             _badge(negocio.name if negocio else None, "accent"),
         ],
         fields=[
-            _campo("Teléfono", ev.phone),
+            # tipo "telefono": el modal pinta el menú de WhatsApp / Llamar
+            _campo("Teléfono", ev.phone, "telefono"),
             _campo("Empieza", ev.start.isoformat(), "fecha"),
             _campo("Termina", ev.end.isoformat() if ev.end else None, "fecha"),
-            _campo("Lugar", ev.place, hint=ev.municipality),
+            # con link de maps el lugar es clicable; sin él, texto normal
+            _campo("Lugar", ev.place or ("Ver en maps" if ev.place_url else None),
+                   "link" if ev.place_url else "texto",
+                   url=ev.place_url, hint=ev.municipality),
             _campo("Municipio", ev.municipality if not ev.place else None),
             _campo("Renta", ", ".join(ev.rentals or []) or None),
             _campo("Anticipo", ev.deposit if reservado else None, "dinero",

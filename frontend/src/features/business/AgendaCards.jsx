@@ -1,7 +1,7 @@
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { miniatura } from "../../components/ui/Comprobante.jsx";
 import { fmtMoney, formatDateTime } from "../../lib/constants.js";
-import TelefonoCliente from "./TelefonoCliente.jsx";
+import TelefonoCliente from "../../components/ui/TelefonoCliente.jsx";
 
 function TarjetaEvento({ evento, onOpen, pasado }) {
   return (
