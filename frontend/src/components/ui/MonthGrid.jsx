@@ -7,10 +7,14 @@ const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
+// mismos rótulos que el calendario general, para que se sientan hermanos
+const DIAS_LUN = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DIAS_DOM = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-/** Grilla mensual genérica: 42 celdas, navegación ‹ ›, inicio de semana de
- *  Ajustes. Quien la usa decide qué fecha manda (getDate) y cómo se pinta
- *  cada chip (renderChip); el onClick del chip lo pone la grilla con onOpen.
+/** Grilla mensual genérica con el mismo look liquid glass del calendario
+ *  general (celdas redondeadas con hover, número del día en círculo, hoy en
+ *  acento). Quien la usa decide qué fecha manda (getDate) y cómo se pinta
+ *  cada bloque (renderChip); el onClick lo pone la grilla con onOpen.
  *
  *  Extraída de la vista Calendario de Proyectos para no copiarla por
  *  tercera vez con la Agenda. La de CalendarPage sigue aparte: esa es
@@ -55,16 +59,15 @@ export default function MonthGrid({ items, getDate, renderChip, onOpen, sinFecha
     });
   }, [anchor, weekStart]);
 
-  const cabecera =
-    weekStart === "sunday" ? ["D", "L", "M", "M", "J", "V", "S"] : ["L", "M", "M", "J", "V", "S", "D"];
+  const cabecera = weekStart === "sunday" ? DIAS_DOM : DIAS_LUN;
   const hoyKey = dayKey(hoy);
 
   return (
     <div className="flex flex-col gap-3">
-      <GlassCard className="p-3">
-        <div className="mb-2 flex items-center justify-between">
+      <GlassCard className="p-4">
+        <div className="mb-3 flex items-center justify-between">
           <button
-            className="rounded-lg px-2 py-1 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+            className="rounded-lg px-2.5 py-1 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
             onClick={() => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1))}
           >
             ‹
@@ -73,21 +76,19 @@ export default function MonthGrid({ items, getDate, renderChip, onOpen, sinFecha
             {MESES[anchor.getMonth()]} {anchor.getFullYear()}
           </p>
           <button
-            className="rounded-lg px-2 py-1 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+            className="rounded-lg px-2.5 py-1 text-ink-soft transition hover:bg-ink/5 hover:text-ink"
             onClick={() => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1))}
           >
             ›
           </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-px text-center text-[10px] text-ink-soft">
-          {cabecera.map((d, i) => (
-            <span key={i} className="py-1">
+        <div className="grid grid-cols-7 gap-1">
+          {cabecera.map((d) => (
+            <div key={d} className="pb-2 text-center text-xs font-semibold text-ink-soft">
               {d}
-            </span>
+            </div>
           ))}
-        </div>
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl bg-ink/10">
           {celdas.map((d) => {
             const key = dayKey(d);
             const delMes = d.getMonth() === anchor.getMonth();
@@ -95,12 +96,18 @@ export default function MonthGrid({ items, getDate, renderChip, onOpen, sinFecha
             return (
               <div
                 key={key}
-                className={`min-h-16 bg-surface p-1 ${delMes ? "" : "opacity-40"} ${
-                  key === hoyKey ? "ring-2 ring-inset ring-accent" : ""
+                className={`min-h-16 rounded-xl border border-transparent p-1 transition hover:border-accent/40 hover:bg-accent-soft/40 md:min-h-24 md:p-1.5 ${
+                  delMes ? "" : "opacity-35"
                 }`}
               >
-                <p className="text-right text-[10px] text-ink-soft">{d.getDate()}</p>
-                <div className="flex flex-col gap-0.5">
+                <span
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                    key === hoyKey ? "bg-accent text-white" : ""
+                  }`}
+                >
+                  {d.getDate()}
+                </span>
+                <div className="mt-0.5 flex flex-col gap-1">
                   {enDia.map((item) => (
                     <button key={item.id} onClick={() => onOpen(item)} className="block w-full text-left">
                       {renderChip(item)}
