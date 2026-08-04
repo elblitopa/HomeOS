@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from backend.database import get_db
 from backend.models import (
     BizDoc,
     BizMessage,
+    BusinessEvent,
     BusinessInfo,
     BusinessProject,
     Competitor,
@@ -362,17 +363,107 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     return {"deleted": True}
 
 
-# ---------- manual / notas del negocio ----------
+# ---------- agenda de eventos (clientes) ----------
+
+class EventPayload(BaseModel):
+    context_id: int
+    client_name: str = Field(min_length=1)
+    phone: str | None = None
+    amount: float = Field(default=0, ge=0)
+    comments: str | None = None
+    start: datetime
+    end: datetime | None = None
+    image_path: str | None = None
+    place: str | None = None
+    place_url: str | None = None
+    municipality: str | None = None
+    rentals: list[str] = []
+    deposit: float = Field(default=0, ge=0)
+
+
+def _validar_evento(payload: EventPayload) -> None:
+    if payload.end and payload.end <= payload.start:
+        raise HTTPException(400, "El fin debe ser después del inicio")
+
+
+@router.get("/events")
+def list_events(
+    context_id: int,
+    desde: datetime | None = Query(default=None, alias="from"),
+    hasta: datetime | None = Query(default=None, alias="to"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(BusinessEvent).filter(BusinessEvent.context_id == context_id)
+    if desde:
+        q = q.filter(BusinessEvent.start >= desde)
+    if hasta:
+        q = q.filter(BusinessEvent.start < hasta)
+    return [e.to_dict() for e in q.order_by(BusinessEvent.start).all()]
+
+
+@router.post("/events", status_code=201)
+def create_event(payload: EventPayload, db: Session = Depends(get_db)):
+    _validar_evento(payload)
+    evento = BusinessEvent(**payload.model_dump())
+    db.add(evento)
+    db.commit()
+    return evento.to_dict()
+
+
+@router.put("/events/{event_id}")
+def update_event(event_id: int, payload: EventPayload, db: Session = Depends(get_db)):
+    evento = db.get(BusinessEvent, event_id)
+    if not evento:
+        raise HTTPException(404, "Evento no encontrado")
+    _validar_evento(payload)
+    for key, value in payload.model_dump().items():
+        setattr(evento, key, value)
+    db.commit()
+    return evento.to_dict()
+
+
+@router.delete("/events/{event_id}")
+def delete_event(event_id: int, db: Session = Depends(get_db)):
+    evento = db.get(BusinessEvent, event_id)
+    if not evento:
+        raise HTTPException(404, "Evento no encontrado")
+    db.delete(evento)
+    db.commit()
+    return {"deleted": True}
+
+
+# ---------- manual / notas / metadatos del negocio ----------
+
+# lo que trae la Agenda de fabrica; se responde sin persistir mientras el
+# usuario no edite el catalogo (None = nunca configurado, [] = borro todas)
+DEFAULT_AGENDA_OPTIONS = ["1 Bocina", "2 Bocinas", "Mezcladora", "Iluminación", "Micrófono"]
+
 
 class InfoPayload(BaseModel):
-    manual: str = ""
-    notes: str = ""
+    # todos opcionales: cada seccion guarda SOLO lo suyo. Sin exclude_unset,
+    # guardar el Manual pisaria los banners de seccion y el catalogo de renta.
+    manual: str | None = None
+    notes: str | None = None
+    section_banners: dict[str, str] | None = None
+    agenda_options: list[str] | None = None
+
+
+def _info_dict(info: BusinessInfo | None, context_id: int) -> dict:
+    base = info.to_dict() if info else {
+        "context_id": context_id,
+        "manual": "",
+        "notes": "",
+        "section_banners": {},
+        "agenda_options": None,
+    }
+    if base["agenda_options"] is None:
+        base["agenda_options"] = DEFAULT_AGENDA_OPTIONS
+    return base
 
 
 @router.get("/info/{context_id}")
 def get_info(context_id: int, db: Session = Depends(get_db)):
-    info = db.get(BusinessInfo, context_id)
-    return info.to_dict() if info else {"context_id": context_id, "manual": "", "notes": ""}
+    return _info_dict(db.get(BusinessInfo, context_id), context_id)
 
 
 @router.put("/info/{context_id}")
@@ -381,7 +472,11 @@ def put_info(context_id: int, payload: InfoPayload, db: Session = Depends(get_db
     if not info:
         info = BusinessInfo(context_id=context_id)
         db.add(info)
-    info.manual = payload.manual
-    info.notes = payload.notes
+    data = payload.model_dump(exclude_unset=True)
+    for key in ("manual", "notes", "section_banners", "agenda_options"):
+        if key in data:
+            # asignacion completa a proposito: SQLAlchemy no detecta
+            # mutaciones in-place de columnas JSON
+            setattr(info, key, data[key])
     db.commit()
-    return info.to_dict()
+    return _info_dict(info, context_id)

@@ -2,6 +2,7 @@ from backend.models.app_entry import AppEntry
 from backend.models.business import (
     BizDoc,
     BizMessage,
+    BusinessEvent,
     BusinessInfo,
     BusinessProject,
     Competitor,
@@ -38,6 +39,7 @@ __all__ = [
     "ExchangeRate",
     "BizDoc",
     "BizMessage",
+    "BusinessEvent",
     "BusinessInfo",
     "BusinessProject",
     "Category",

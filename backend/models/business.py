@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database import Base
@@ -203,8 +203,58 @@ class BusinessProject(Base):
         }
 
 
+class BusinessEvent(Base):
+    """Evento agendado con un cliente (la Agenda del negocio).
+
+    No es un BusinessProject (pendiente interno) ni un Event (calendario
+    personal): una reserva tiene cliente, monto, anticipo y equipo rentado.
+    """
+
+    __tablename__ = "business_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    context_id: Mapped[int] = mapped_column(
+        ForeignKey("contexts.id", ondelete="CASCADE"), nullable=False
+    )
+    client_name: Mapped[str] = mapped_column(String, nullable=False)
+    phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    amount: Mapped[float] = mapped_column(Float, default=0.0)  # a cobrar, MXN
+    comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    image_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    place: Mapped[str | None] = mapped_column(String, nullable=True)
+    place_url: Mapped[str | None] = mapped_column(String, nullable=True)  # link de maps
+    municipality: Mapped[str | None] = mapped_column(String, nullable=True)
+    rentals: Mapped[list | None] = mapped_column(JSON, default=list)  # ["2 Bocinas", ...]
+    # anticipo variable ($100, $200...); reservado = anticipo > 0
+    deposit: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "context_id": self.context_id,
+            "client_name": self.client_name,
+            "phone": self.phone,
+            "amount": self.amount,
+            "comments": self.comments,
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat() if self.end else None,
+            "image_path": self.image_path,
+            "place": self.place,
+            "place_url": self.place_url,
+            "municipality": self.municipality,
+            "rentals": self.rentals or [],
+            "deposit": self.deposit,
+            # derivado aqui para que las vistas y el calendario no repitan la regla
+            "reserved": (self.deposit or 0) > 0,
+            "days_left": (self.start.date() - datetime.now().date()).days,
+        }
+
+
 class BusinessInfo(Base):
-    """Manual de procesos y notas generales por negocio."""
+    """Manual de procesos, notas y metadatos sueltos por negocio."""
 
     __tablename__ = "business_info"
 
@@ -213,10 +263,17 @@ class BusinessInfo(Base):
     )
     manual: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # banner de cada tarjeta de seccion del detalle: {"proyectos": "/uploads/..."}
+    section_banners: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # catalogo de renta de la Agenda. None = nunca configurado (el GET responde
+    # el default sin persistir); [] = el usuario borro todas, y se respeta
+    agenda_options: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     def to_dict(self) -> dict:
         return {
             "context_id": self.context_id,
             "manual": self.manual or "",
             "notes": self.notes or "",
+            "section_banners": self.section_banners or {},
+            "agenda_options": self.agenda_options,
         }

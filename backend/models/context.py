@@ -21,6 +21,9 @@ class Context(Base):
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     color: Mapped[str] = mapped_column(String, default="#2383e2")
     is_business: Mapped[int] = mapped_column(Integer, default=0)
+    # el negocio tiene la seccion Agenda (eventos de clientes). Es una
+    # palomita y no un framework de secciones: hoy solo la usa Renta Bocinas
+    has_agenda: Mapped[int] = mapped_column(Integer, default=0)
     banner_path: Mapped[str | None] = mapped_column(String, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -31,6 +34,7 @@ class Context(Base):
             "name": self.name,
             "color": self.color,
             "is_business": bool(self.is_business),
+            "has_agenda": bool(self.has_agenda),
             "banner_path": self.banner_path,
             "sort_order": self.sort_order,
         }

@@ -14,6 +14,7 @@ class ContextPayload(BaseModel):
     # None = no tocar. Importa en el PUT: Ajustes edita solo nombre/color, y un
     # default fijo le borraría la palomita y el banner a un negocio al renombrarlo.
     is_business: bool | None = None
+    has_agenda: bool | None = None
     banner_path: str | None = None
 
 
@@ -37,6 +38,7 @@ def create_context(payload: ContextPayload, db: Session = Depends(get_db)):
         name=payload.name,
         color=payload.color,
         is_business=1 if payload.is_business else 0,
+        has_agenda=1 if payload.has_agenda else 0,
         banner_path=payload.banner_path,
     )
     db.add(ctx)
@@ -70,6 +72,8 @@ def update_context(ctx_id: int, payload: ContextPayload, db: Session = Depends(g
     data = payload.model_dump(exclude_unset=True)
     if "is_business" in data and data["is_business"] is not None:
         ctx.is_business = 1 if data["is_business"] else 0
+    if "has_agenda" in data and data["has_agenda"] is not None:
+        ctx.has_agenda = 1 if data["has_agenda"] else 0
     if "banner_path" in data:
         ctx.banner_path = data["banner_path"]
     db.commit()

@@ -62,6 +62,11 @@ MIGRATIONS = [
     ("transactions", "provider_id", "provider_id INTEGER REFERENCES providers(id) ON DELETE SET NULL"),
     ("subscriptions", "context_id", "context_id INTEGER REFERENCES contexts(id) ON DELETE SET NULL"),
     ("subscriptions", "provider_id", "provider_id INTEGER REFERENCES providers(id) ON DELETE SET NULL"),
+    # agenda de eventos: la palomita viaja con el negocio; banners de seccion
+    # y catalogo de renta son metadatos del negocio (business_info)
+    ("contexts", "has_agenda", "has_agenda INTEGER DEFAULT 0"),
+    ("business_info", "section_banners", "section_banners JSON"),
+    ("business_info", "agenda_options", "agenda_options JSON"),
 ]
 
 # Columnas que dejaron de usarse (necesita SQLite 3.35+, incluido desde Python 3.11)
