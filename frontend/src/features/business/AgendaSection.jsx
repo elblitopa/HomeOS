@@ -2,35 +2,50 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPut } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
+import useMediaQuery from "../../hooks/useMediaQuery.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
 import AgendaCalendar from "./AgendaCalendar.jsx";
 import AgendaCards from "./AgendaCards.jsx";
 import AgendaEventModal from "./AgendaEventModal.jsx";
 import AgendaTable from "./AgendaTable.jsx";
 
-const VISTAS = [
+// el orden y el default cambian por dispositivo: en PC/iPad el calendario es
+// lo comodo; en el celular la grilla mensual no luce y las tarjetas si
+const ORDEN_ESCRITORIO = [
+  { key: "calendario", label: "Calendario" },
+  { key: "tarjetas", label: "Tarjetas" },
   { key: "tabla", label: "Tabla" },
+];
+const ORDEN_MOVIL = [
   { key: "tarjetas", label: "Tarjetas" },
   { key: "calendario", label: "Calendario" },
+  { key: "tabla", label: "Tabla" },
 ];
-
-const VISTA_KEY = "negocios-agenda-vista";
 
 /** La Agenda del negocio: eventos de clientes en tres vistas.
  *
  *  Las vistas solo pintan; crear/editar y el catálogo de renta viven aquí.
  */
 export default function AgendaSection({ contextId }) {
+  // md: = iPad en adelante, el mismo corte que usa todo el panel
+  const esEscritorio = useMediaQuery("(min-width: 768px)");
   const [eventos, setEventos] = useState([]);
   const [options, setOptions] = useState([]);
-  const [vista, setVista] = useState(() => localStorage.getItem(VISTA_KEY) || "tabla");
   const [modal, setModal] = useState(null); // null | {} | {item}
   const [catalogo, setCatalogo] = useState(false);
   const [nuevaOpcion, setNuevaOpcion] = useState("");
 
+  // la preferencia se guarda por tipo de dispositivo: elegir Tabla en la PC
+  // no debe cambiar lo que abre el celular
+  const vistaKey = esEscritorio ? "agenda-vista-escritorio" : "agenda-vista-movil";
+  const [eleccion, setEleccion] = useState(null);
+
+  const vistas = esEscritorio ? ORDEN_ESCRITORIO : ORDEN_MOVIL;
+  const vista = eleccion || localStorage.getItem(vistaKey) || vistas[0].key;
+
   const cambiarVista = (v) => {
-    setVista(v);
-    localStorage.setItem(VISTA_KEY, v);
+    setEleccion(v);
+    localStorage.setItem(vistaKey, v);
   };
 
   const refresh = useCallback(() => {
@@ -65,7 +80,7 @@ export default function AgendaSection({ contextId }) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1 rounded-xl bg-ink/5 p-1">
-          {VISTAS.map((v) => (
+          {vistas.map((v) => (
             <button
               key={v.key}
               onClick={() => cambiarVista(v.key)}

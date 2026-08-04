@@ -22,7 +22,7 @@ const DIAS_DOM = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
  *
  *  sinFecha: {label, render} | null — franja para los items sin fecha.
  */
-export default function MonthGrid({ items, getDate, renderChip, onOpen, sinFecha = null }) {
+export default function MonthGrid({ items, getDate, getEndDate, renderChip, onOpen, sinFecha = null }) {
   const hoy = new Date();
   const [anchor, setAnchor] = useState(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
   const [weekStart, setWeekStart] = useState("monday");
@@ -32,16 +32,27 @@ export default function MonthGrid({ items, getDate, renderChip, onOpen, sinFecha
     apiGet("/api/settings").then((s) => setWeekStart(s.week_starts_on || "monday")).catch(() => {});
   }, []);
 
+  // un item aparece en CADA dia que cubre (con getEndDate): un evento de
+  // 7:30 pm a 1:00 am abarca dos dias y se tiene que ver en los dos
   const porDia = useMemo(() => {
     const map = {};
     for (const item of items) {
       const fecha = getDate(item);
       if (!fecha) continue;
-      const key = dayKey(new Date(fecha));
-      (map[key] ||= []).push(item);
+      const inicio = new Date(fecha);
+      const finRaw = getEndDate ? getEndDate(item) : null;
+      const fin = finRaw ? new Date(finRaw) : inicio;
+      const cursor = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate());
+      const ultimo = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate());
+      let pasos = 0;
+      while (cursor <= ultimo && pasos < 14) { // tope por si un fin quedo mal capturado
+        (map[dayKey(cursor)] ||= []).push({ item, esInicio: pasos === 0 });
+        cursor.setDate(cursor.getDate() + 1);
+        pasos += 1;
+      }
     }
     return map;
-  }, [items, getDate]);
+  }, [items, getDate, getEndDate]);
 
   const pendientes = sinFecha ? items.filter((i) => !getDate(i)) : [];
 
@@ -108,9 +119,13 @@ export default function MonthGrid({ items, getDate, renderChip, onOpen, sinFecha
                   {d.getDate()}
                 </span>
                 <div className="mt-0.5 flex flex-col gap-1">
-                  {enDia.map((item) => (
-                    <button key={item.id} onClick={() => onOpen(item)} className="block w-full text-left">
-                      {renderChip(item)}
+                  {enDia.map(({ item, esInicio }) => (
+                    <button
+                      key={`${item.id}-${esInicio ? "i" : key}`}
+                      onClick={() => onOpen(item)}
+                      className="block w-full text-left"
+                    >
+                      {renderChip(item, esInicio)}
                     </button>
                   ))}
                 </div>

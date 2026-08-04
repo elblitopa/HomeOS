@@ -14,8 +14,26 @@ const hora = (iso) =>
  */
 export default function AgendaCalendar({ items, onOpen }) {
   const getDate = useCallback((e) => e.start, []);
+  const getEndDate = useCallback((e) => e.end, []);
 
-  const renderChip = (e) => (
+  // en los días de continuación no se repiten todas las propiedades: una
+  // barra "↪ sigue" basta para ver que el evento abarca ese día también
+  const renderChip = (e, esInicio) => {
+    if (!esInicio) {
+      return (
+        <span
+          className={`block truncate rounded-lg px-1.5 py-0.5 text-[11px] font-semibold text-white ${
+            e.reserved ? "bg-ok" : "bg-accent"
+          }`}
+        >
+          ↪ {e.client_name} · hasta {hora(e.end)}
+        </span>
+      );
+    }
+    return renderTarjeta(e);
+  };
+
+  const renderTarjeta = (e) => (
     <span className="block overflow-hidden rounded-lg border border-glass-border bg-surface/70">
       <span
         className={`block truncate px-1.5 py-0.5 text-[11px] font-semibold text-white ${
@@ -46,5 +64,13 @@ export default function AgendaCalendar({ items, onOpen }) {
     </span>
   );
 
-  return <MonthGrid items={items} getDate={getDate} renderChip={renderChip} onOpen={onOpen} />;
+  return (
+    <MonthGrid
+      items={items}
+      getDate={getDate}
+      getEndDate={getEndDate}
+      renderChip={renderChip}
+      onOpen={onOpen}
+    />
+  );
 }

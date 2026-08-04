@@ -169,13 +169,16 @@ def agenda(
 
     if "agenda" in wanted:
         # eventos de clientes de los negocios con Agenda prendida: si el
-        # negocio la apaga, sus eventos dejan de salir aqui sin borrarse
+        # negocio la apaga, sus eventos dejan de salir aqui sin borrarse.
+        # El margen hacia atras es para atrapar eventos que empezaron antes
+        # del rango pero siguen dentro (una tocada de 7:30 pm a 1:00 am
+        # abarca dos dias y debe verse en los dos).
         q = (
             db.query(BusinessEvent)
             .join(Context, Context.id == BusinessEvent.context_id)
             .filter(
                 Context.has_agenda == 1,
-                BusinessEvent.start >= desde,
+                BusinessEvent.start >= desde - timedelta(days=14),
                 BusinessEvent.start < hasta,
             )
         )
@@ -184,10 +187,21 @@ def agenda(
             if ev.municipality:
                 partes.append(ev.municipality)
             partes.append("reservado" if (ev.deposit or 0) > 0 else "sin anticipo")
-            add("agenda", ev.id, ev.client_name, ev.start, " · ".join(partes),
-                ev.context_id,
-                {"end": ev.end.isoformat() if ev.end else None,
-                 "reserved": (ev.deposit or 0) > 0})
+            detalle = " · ".join(partes)
+            extra = {"end": ev.end.isoformat() if ev.end else None,
+                     "reserved": (ev.deposit or 0) > 0}
+            # una ocurrencia por dia cubierto, con el mismo ref_id — la misma
+            # expansion virtual que ya hacen suscripciones y pagos
+            fin = ev.end or ev.start
+            dia, pasos = ev.start.date(), 0
+            while dia <= fin.date() and pasos < 14:
+                cuando = ev.start if pasos == 0 else datetime.combine(dia, datetime.min.time())
+                if desde <= cuando < hasta:
+                    titulo = ev.client_name if pasos == 0 else f"↪ {ev.client_name}"
+                    add("agenda", ev.id, titulo, cuando, detalle, ev.context_id,
+                        {**extra, "continuacion": pasos > 0})
+                dia += timedelta(days=1)
+                pasos += 1
 
     if "transaccion" in wanted:
         cuentas = {a.id: a for a in db.query(Account).all()}
