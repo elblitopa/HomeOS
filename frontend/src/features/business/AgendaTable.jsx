@@ -1,6 +1,7 @@
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { miniatura } from "../../components/ui/Comprobante.jsx";
 import { fmtMoney, formatDateTime } from "../../lib/constants.js";
+import TelefonoCliente from "./TelefonoCliente.jsx";
 
 /** La vista tipo Notion: una fila por evento, columnas alineadas. */
 export default function AgendaTable({ items, onOpen }) {
@@ -41,7 +42,11 @@ export default function AgendaTable({ items, onOpen }) {
                   )}
                   <span className="min-w-0">
                     <span className="block max-w-44 truncate font-medium">{e.client_name}</span>
-                    {e.phone && <span className="block text-xs text-ink-soft">{e.phone}</span>}
+                    {e.phone && (
+                      <span className="block text-xs">
+                        <TelefonoCliente phone={e.phone} />
+                      </span>
+                    )}
                   </span>
                 </span>
               </td>

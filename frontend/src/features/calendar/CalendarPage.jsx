@@ -14,6 +14,9 @@ import EventFormModal from "./EventFormModal.jsx";
 
 const WEEKDAYS_LUN = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const WEEKDAYS_DOM = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+const horaCorta = (iso) =>
+  new Date(iso).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" });
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
@@ -95,11 +98,35 @@ export default function CalendarPage() {
     [items, contextFilter]
   );
 
+  // los eventos de agenda que abarcan varios dias se pintan como UNA barra
+  // extendida (estilo Notion), no como un chip por dia. El backend manda una
+  // ocurrencia por dia cubierto (mismo ref_id); aqui se juntan de nuevo:
+  // la mas temprana define la barra y las demas se descartan.
+  const { barras, sueltos } = useMemo(() => {
+    const sueltos = [];
+    const porRef = new Map();
+    for (const item of visibles) {
+      if (item.kind !== "agenda") {
+        sueltos.push(item);
+        continue;
+      }
+      const previo = porRef.get(item.ref_id);
+      if (!previo || item.date < previo.date) porRef.set(item.ref_id, item);
+    }
+    const barras = [];
+    for (const item of porRef.values()) {
+      const finKey = item.end ? item.end.slice(0, 10) : null;
+      if (finKey && finKey > item.date.slice(0, 10)) barras.push(item);
+      else sueltos.push(item);
+    }
+    return { barras, sueltos };
+  }, [visibles]);
+
   const porDia = useMemo(() => {
     const map = {};
-    for (const item of visibles) (map[item.date.slice(0, 10)] ||= []).push(item);
+    for (const item of sueltos) (map[item.date.slice(0, 10)] ||= []).push(item);
     return map;
-  }, [visibles]);
+  }, [sueltos]);
 
   const domingoPrimero = weekStart === "sunday";
   const weekdays = domingoPrimero ? WEEKDAYS_DOM : WEEKDAYS_LUN;
@@ -115,6 +142,42 @@ export default function CalendarPage() {
       return d;
     });
   }, [year, month, domingoPrimero]);
+
+  // segmentos de barra por semana, con carril para que dos barras que
+  // comparten dias se apilen en vez de encimarse
+  const segmentosPorSemana = useMemo(() => {
+    const sems = Array.from({ length: 6 }, () => []);
+    const idxPorDia = {};
+    cells.forEach((d, i) => (idxPorDia[dayKey(d)] = i));
+    for (const item of barras) {
+      let a = idxPorDia[item.date.slice(0, 10)];
+      let b = idxPorDia[item.end.slice(0, 10)];
+      if (a === undefined && b === undefined) continue; // fuera de la grilla
+      a = a ?? 0;
+      b = Math.max(b ?? 41, a);
+      for (let w = Math.floor(a / 7); w <= Math.floor(b / 7); w++) {
+        const wIni = w * 7;
+        sems[w].push({
+          item,
+          c1: Math.max(a, wIni) - wIni,
+          c2: Math.min(b, wIni + 6) - wIni,
+          esInicio: a >= wIni,
+        });
+      }
+    }
+    for (const segs of sems) {
+      const ocupado = [];
+      for (const seg of segs) {
+        let carril = 0;
+        while ((ocupado[carril] || []).some(([x1, x2]) => !(seg.c2 < x1 || seg.c1 > x2))) {
+          carril += 1;
+        }
+        (ocupado[carril] ||= []).push([seg.c1, seg.c2]);
+        seg.carril = carril;
+      }
+    }
+    return sems;
+  }, [barras, cells]);
 
   const upcoming = useMemo(
     () => visibles.filter((i) => new Date(i.date) >= new Date(Date.now() - 3600e3)).slice(0, 10),
@@ -431,11 +494,22 @@ export default function CalendarPage() {
                 {d}
               </div>
             ))}
-            {cells.map((date) => {
-              const key = dayKey(date);
-              const inMonth = date.getMonth() === month;
-              const delDia = porDia[key] || [];
+          </div>
+          {/* semana por semana: las barras multi-dia van en un overlay que usa
+              la MISMA plantilla de grid, para quedar alineadas con las celdas */}
+          <div className="flex flex-col gap-1">
+            {Array.from({ length: 6 }, (_, w) => {
+              const dias = cells.slice(w * 7, w * 7 + 7);
+              const segs = segmentosPorSemana[w];
+              const carriles = segs.reduce((m, s) => Math.max(m, s.carril + 1), 0);
               return (
+                <div key={w} className="relative">
+                  <div className="grid grid-cols-7 gap-1">
+                    {dias.map((date) => {
+                      const key = dayKey(date);
+                      const inMonth = date.getMonth() === month;
+                      const delDia = porDia[key] || [];
+                      return (
                 <div
                   key={key}
                   data-daykey={key}
@@ -471,7 +545,12 @@ export default function CalendarPage() {
                   >
                     {date.getDate()}
                   </button>
-                  <div className="mt-0.5 flex flex-col gap-0.5">
+                  {/* si hay barras arriba, el contenido del dia baja para no
+                      quedar debajo de ellas */}
+                  <div
+                    className="mt-0.5 flex flex-col gap-0.5"
+                    style={carriles ? { paddingTop: `${carriles * 1.5}rem` } : undefined}
+                  >
                     {delDia.slice(0, 3).map((item, i) => (
                       <button
                         key={`${item.kind}-${item.ref_id}-${i}`}
@@ -510,6 +589,55 @@ export default function CalendarPage() {
                       </span>
                     )}
                   </div>
+                </div>
+                      );
+                    })}
+                  </div>
+                  {carriles > 0 && (
+                    <div
+                      className="pointer-events-none absolute inset-0 grid grid-cols-7 gap-1"
+                      style={{ gridTemplateRows: `1.75rem repeat(${carriles}, 1.5rem)` }}
+                    >
+                      {segs.map((seg) => {
+                        const it = seg.item;
+                        const horario = it.end
+                          ? `${horaCorta(it.date)} – ${horaCorta(it.end)}`
+                          : horaCorta(it.date);
+                        return (
+                          <button
+                            key={`${it.ref_id}-${w}-${seg.carril}`}
+                            className={`pointer-events-auto z-10 mx-1 cursor-grab select-none self-start truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium text-white active:cursor-grabbing [-webkit-touch-callout:none] md:mx-1.5 ${
+                              dragItem === it ? "opacity-40" : ""
+                            }`}
+                            style={{
+                              gridColumn: `${seg.c1 + 1} / ${seg.c2 + 2}`,
+                              gridRow: seg.carril + 2,
+                              backgroundColor: colorDe(it),
+                            }}
+                            draggable
+                            onDragStart={(e) => {
+                              setDragItem(it);
+                              e.dataTransfer.effectAllowed = "move";
+                            }}
+                            onDragEnd={() => {
+                              setDragItem(null);
+                              setDropTarget(null);
+                            }}
+                            onTouchStart={(e) => iniciarTouch(e, it)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              abrir(it);
+                            }}
+                            title={`${KIND.agenda?.label}: ${it.title} · ${horario} — arrástralo a otro día para moverlo`}
+                          >
+                            {seg.esInicio
+                              ? `${KIND.agenda?.icon} ${it.title} · ${horario}`
+                              : `↪ ${it.title}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}

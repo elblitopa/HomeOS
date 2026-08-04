@@ -1,6 +1,7 @@
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { miniatura } from "../../components/ui/Comprobante.jsx";
 import { fmtMoney, formatDateTime } from "../../lib/constants.js";
+import TelefonoCliente from "./TelefonoCliente.jsx";
 
 function TarjetaEvento({ evento, onOpen, pasado }) {
   return (
@@ -46,7 +47,11 @@ function TarjetaEvento({ evento, onOpen, pasado }) {
             {evento.municipality ? ` · ${evento.municipality}` : ""}
           </span>
         )}
-        {evento.phone && <span className="text-xs text-ink-soft">📞 {evento.phone}</span>}
+        {evento.phone && (
+          <span className="text-xs">
+            <TelefonoCliente phone={evento.phone} />
+          </span>
+        )}
         {(evento.rentals || []).length > 0 && (
           <span className="mt-1 flex flex-wrap gap-1">
             {evento.rentals.map((r) => (
