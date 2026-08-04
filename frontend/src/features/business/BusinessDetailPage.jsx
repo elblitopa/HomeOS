@@ -5,6 +5,7 @@ import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import useContexts from "../../hooks/useContexts.js";
+import AgendaSection from "./AgendaSection.jsx";
 import BusinessFormModal from "./BusinessFormModal.jsx";
 import ContentSection from "./ContentSection.jsx";
 import PaymentsSection from "./PaymentsSection.jsx";
@@ -122,11 +123,7 @@ export default function BusinessDetailPage() {
 
   const renderSection = (key) => (
     <>
-      {key === "agenda" && (
-        <GlassCard className="p-8 text-center text-sm text-ink-soft">
-          La Agenda de eventos llega en la siguiente fase.
-        </GlassCard>
-      )}
+      {key === "agenda" && <AgendaSection contextId={negocio.id} />}
       {key === "proyectos" && <ProjectsSection contextId={negocio.id} />}
       {key === "proveedores" && (
         <ProvidersSection contextId={negocio.id} contexts={contexts} contextsById={byId} version={version} />

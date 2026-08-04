@@ -17,7 +17,7 @@ const PALETA = [
  *  sin volver a vincular nada.
  */
 export default function BusinessFormModal({ open, business, onClose, onSaved, onDeleted }) {
-  const [form, setForm] = useState({ name: "", color: PALETA[0], banner_path: null });
+  const [form, setForm] = useState({ name: "", color: PALETA[0], banner_path: null, has_agenda: false });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -27,6 +27,7 @@ export default function BusinessFormModal({ open, business, onClose, onSaved, on
         name: business?.name || "",
         color: business?.color || PALETA[0],
         banner_path: business?.banner_path || null,
+        has_agenda: !!business?.has_agenda,
       });
       setError(null);
     }
@@ -51,6 +52,7 @@ export default function BusinessFormModal({ open, business, onClose, onSaved, on
       name: form.name.trim(),
       color: form.color,
       is_business: true,
+      has_agenda: form.has_agenda,
       banner_path: form.banner_path,
     };
     try {
@@ -68,8 +70,9 @@ export default function BusinessFormModal({ open, business, onClose, onSaved, on
   const remove = async () => {
     const aviso =
       `¿Eliminar el negocio "${business.name}"?\n\n` +
-      "Se borran también sus proyectos, contenido, competidores, mensajes y " +
-      "documentos. Sus transacciones y tareas quedan sin etiqueta.";
+      "Se borran también sus proyectos, eventos agendados, contenido, " +
+      "competidores, mensajes y documentos. Sus transacciones y tareas " +
+      "quedan sin etiqueta.";
     if (!confirm(aviso)) return;
     await apiDelete(`/api/contexts/${business.id}`);
     // borrar no es guardar: el detalle necesita navegar fuera de la página
@@ -110,6 +113,22 @@ export default function BusinessFormModal({ open, business, onClose, onSaved, on
             ))}
           </div>
         </div>
+
+        <label className="flex cursor-pointer items-start gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={form.has_agenda}
+            onChange={(e) => setForm((f) => ({ ...f, has_agenda: e.target.checked }))}
+            className="mt-0.5 h-4 w-4 accent-[#2383e2]"
+          />
+          <span>
+            Agenda de eventos
+            <span className="block text-xs font-normal text-ink-soft">
+              Sección para agendar eventos de clientes: fechas, rentas y anticipos.
+              Apagarla no borra los eventos, solo esconde la sección.
+            </span>
+          </span>
+        </label>
 
         <div className="flex flex-col gap-1.5 text-sm font-medium">
           Banner (opcional)
