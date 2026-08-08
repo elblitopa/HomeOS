@@ -6,6 +6,7 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import { CONTEXT_COLORS } from "../../lib/constants.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
+import AgentCard from "./AgentCard.jsx";
 import GoogleCard from "./GoogleCard.jsx";
 
 export default function SettingsPage() {
@@ -277,6 +278,8 @@ export default function SettingsPage() {
         </GlassCard>
 
         <GoogleCard />
+
+        <AgentCard />
 
         <GlassCard className="p-5">
           <h2 className="mb-1 font-semibold">Calendario</h2>
