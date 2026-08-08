@@ -1,3 +1,4 @@
+from backend.models.agent import Agent, AgentCommand
 from backend.models.app_entry import AppEntry
 from backend.models.business import (
     BizDoc,
@@ -34,6 +35,8 @@ from backend.models.todo import Todo, TodoEntry
 
 __all__ = [
     "Account",
+    "Agent",
+    "AgentCommand",
     "AppEntry",
     "BASE_CURRENCY",
     "ExchangeRate",

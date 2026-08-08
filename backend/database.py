@@ -80,6 +80,9 @@ MIGRATIONS = [
     ("contexts", "has_agenda", "has_agenda INTEGER DEFAULT 0"),
     ("business_info", "section_banners", "section_banners JSON"),
     ("business_info", "agenda_options", "agenda_options JSON"),
+    # a que maquina pertenece cada app (Fase 2 cloud). El app_id estable es el
+    # slug que ya existia; no se genera ningun identificador nuevo.
+    ("apps", "device_id", "device_id VARCHAR DEFAULT 'pc-principal'"),
 ]
 
 # Columnas que dejaron de usarse (en SQLite necesita 3.35+, incluido en Python 3.11)

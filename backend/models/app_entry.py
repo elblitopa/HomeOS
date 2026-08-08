@@ -19,6 +19,9 @@ class AppEntry(Base):
     banner_path: Mapped[str | None] = mapped_column(String, nullable=True)
     accent: Mapped[str] = mapped_column(String, default="#2383e2")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # en que maquina vive la app. El identificador estable de la app hacia el
+    # agente (app_id) es el slug: unico, legible y ya existia — no se inventa otro.
+    device_id: Mapped[str] = mapped_column(String, default="pc-principal")
     last_pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -35,5 +38,6 @@ class AppEntry(Base):
             "banner_path": self.banner_path,
             "accent": self.accent,
             "sort_order": self.sort_order,
+            "device_id": self.device_id or "pc-principal",
             "last_started_at": self.last_started_at.isoformat() if self.last_started_at else None,
         }
