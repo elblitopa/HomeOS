@@ -27,6 +27,19 @@ from backend.services.saldos import goal_saved
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
 
+def _mes_de(col):
+    """Expresión SQL 'AAAA-MM' de una columna de fecha, según el motor.
+
+    strftime solo existe en SQLite; en Postgres el equivalente es to_char.
+    Es la única función SQL no portable de todo el backend.
+    """
+    from backend.database import engine
+
+    if engine.dialect.name == "sqlite":
+        return func.strftime("%Y-%m", col)
+    return func.to_char(col, "YYYY-MM")
+
+
 _add_months = add_months  # se movio a services/dates.py y se comparte con el calendario
 
 
@@ -1128,17 +1141,16 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
         entry = by_category.setdefault(cat_id, {"ingresos": 0.0, "egresos": 0.0})
         entry["ingresos" if tx_type == "ingreso" else "egresos"] += total
 
+    mes = _mes_de(Transaction.occurred_at)
     qm = db.query(
-        func.strftime("%Y-%m", Transaction.occurred_at),
+        mes,
         Transaction.type,
         func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
     ).filter(Transaction.type.in_(["ingreso", "egreso"]))
     if context_id:
         qm = qm.filter(Transaction.context_id == context_id)
     by_month: dict = {}
-    for month_key, tx_type, total in qm.group_by(
-        func.strftime("%Y-%m", Transaction.occurred_at), Transaction.type
-    ):
+    for month_key, tx_type, total in qm.group_by(mes, Transaction.type):
         entry = by_month.setdefault(month_key, {"ingresos": 0.0, "egresos": 0.0})
         entry["ingresos" if tx_type == "ingreso" else "egresos"] += total
 

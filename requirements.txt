@@ -5,3 +5,5 @@ python-multipart>=0.0.12
 psutil>=6.0
 openpyxl>=3.1
 pillow>=10.0
+# Solo para modo postgres (DATABASE_URL=postgresql+psycopg://...):
+#   pip install "psycopg[binary]>=3.1"

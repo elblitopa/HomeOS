@@ -1,27 +1,34 @@
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-from backend.config import DB_PATH
+from backend.config import DATABASE_URL, IS_CLOUD
 
 
 class Base(DeclarativeBase):
     pass
 
 
+# La URL decide el motor: sqlite (default, local) o postgres (cloud opcional).
+# check_same_thread es exclusivo del driver sqlite3 y truena con psycopg.
+_es_sqlite = DATABASE_URL.startswith("sqlite")
+
 engine = create_engine(
-    f"sqlite:///{DB_PATH}",
-    connect_args={"check_same_thread": False},
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if _es_sqlite else {},
 )
 
+if _es_sqlite:
+    # En local el repo vive en OneDrive: journal DELETE evita los archivos
+    # -wal/-shm que hacen churn constante de sincronizacion. En la nube no hay
+    # OneDrive y WAL aguanta mejor lecturas concurrentes con el scheduler.
+    _journal = "WAL" if IS_CLOUD else "DELETE"
 
-# El repo vive en OneDrive: journal DELETE (default) evita los archivos
-# -wal/-shm que hacen churn constante de sincronizacion.
-@event.listens_for(engine, "connect")
-def _set_sqlite_pragma(dbapi_conn, _record):
-    cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA journal_mode=DELETE")
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, _record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute(f"PRAGMA journal_mode={_journal}")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -37,6 +44,12 @@ def get_db():
 
 # Columnas agregadas despues de que la base ya existia. create_all() solo crea
 # tablas nuevas, no columnas nuevas, asi que estas se agregan a mano.
+#
+# El DDL de cada tupla esta escrito para SQLite (el historico); en Postgres los
+# defaults booleanos 1/0 no son validos y se traducen en _ddl_para_dialecto.
+# Una base Postgres NUEVA no necesita nada de esto (create_all crea las tablas
+# ya completas); las migraciones solo aplican a bases que vienen de versiones
+# anteriores del esquema.
 MIGRATIONS = [
     ("transactions", "fx_rate", "fx_rate FLOAT"),
     ("accounts", "banner_path", "banner_path VARCHAR"),
@@ -69,24 +82,45 @@ MIGRATIONS = [
     ("business_info", "agenda_options", "agenda_options JSON"),
 ]
 
-# Columnas que dejaron de usarse (necesita SQLite 3.35+, incluido desde Python 3.11)
+# Columnas que dejaron de usarse (en SQLite necesita 3.35+, incluido en Python 3.11)
 DROP_COLUMNS = [
     ("goals", "period"),
 ]
 
+# Reescrituras de DDL para Postgres: en PG un BOOLEAN no acepta DEFAULT 1/0.
+_PG_DDL_FIXES = {
+    "BOOLEAN DEFAULT 1": "BOOLEAN DEFAULT TRUE",
+    "BOOLEAN DEFAULT 0": "BOOLEAN DEFAULT FALSE",
+    "DATETIME": "TIMESTAMP",
+}
+
+
+def _ddl_para_dialecto(ddl: str) -> str:
+    if _es_sqlite:
+        return ddl
+    for viejo, nuevo in _PG_DDL_FIXES.items():
+        ddl = ddl.replace(viejo, nuevo)
+    return ddl
+
 
 def ensure_columns() -> None:
+    # inspect() funciona en ambos dialectos (PRAGMA table_info era SQLite-only)
+    inspector = inspect(engine)
+
+    def columns_of(table: str) -> set[str]:
+        if not inspector.has_table(table):
+            return set()
+        return {col["name"] for col in inspector.get_columns(table)}
+
     with engine.begin() as conn:
-
-        def columns_of(table: str) -> set[str]:
-            return {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
-
         for table, column, ddl in MIGRATIONS:
             cols = columns_of(table)
             if not cols:
                 continue  # la tabla aun no existe; create_all la crea completa
             if column not in cols:
-                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN {_ddl_para_dialecto(ddl)}"
+                )
 
         for table, column in DROP_COLUMNS:
             if column in columns_of(table):
