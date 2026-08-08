@@ -1,0 +1,3 @@
+# HomeOS Windows Agent — dependencias mínimas.
+# Todo lo demás es stdlib (urllib, sqlite3, logging, subprocess).
+psutil>=6.0
