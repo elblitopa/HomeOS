@@ -10,6 +10,8 @@ from backend.database import Base, SessionLocal, engine, ensure_columns
 import backend.models  # noqa: F401  (registra los modelos en Base.metadata)
 from backend.models import Category, DEFAULT_CATEGORIES
 from backend.routers import (
+    agent_bridge,
+    agents,
     apps,
     business,
     calendar_agenda,
@@ -60,6 +62,8 @@ if config.IS_CLOUD:
     app.add_middleware(auth.AuthMiddleware)
 
 app.include_router(auth.router)
+app.include_router(agents.router)        # usuario (cookie en cloud)
+app.include_router(agent_bridge.router)  # maquina-a-maquina (token de agente)
 app.include_router(apps.router)
 app.include_router(contexts.router)
 app.include_router(todos.router)
