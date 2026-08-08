@@ -1,5 +1,10 @@
 async function handle(res) {
   if (!res.ok) {
+    // sesión vencida o inexistente (solo pasa en modo cloud): avisar al shell
+    // para que muestre la pantalla de login en vez de errores sueltos
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent("homeos:sin-sesion"));
+    }
     let detail = `Error ${res.status}`;
     try {
       const data = await res.json();

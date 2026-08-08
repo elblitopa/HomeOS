@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
+import LoginGate from "./components/LoginGate.jsx";
 import "./index.css";
 
 // iOS Safari ignora user-scalable=no; el pinch-zoom se bloquea con los
@@ -13,7 +14,10 @@ for (const ev of ["gesturestart", "gesturechange", "gestureend"]) {
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      {/* en modo local la puerta es invisible; en cloud pide la clave */}
+      <LoginGate>
+        <App />
+      </LoginGate>
     </BrowserRouter>
   </React.StrictMode>
 );

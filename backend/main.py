@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend import config
+from backend import auth, config
 from backend.database import Base, SessionLocal, engine, ensure_columns
 import backend.models  # noqa: F401  (registra los modelos en Base.metadata)
 from backend.models import Category, DEFAULT_CATEGORIES
@@ -29,6 +29,9 @@ from backend.routers.apps import run_manifest_import
 from backend.services import fx
 from backend.services.scheduler import reminder_loop
 
+# en cloud, sin secretos NO se arranca: mejor un error claro que un panel publico
+config.validate_cloud_config()
+
 config.ensure_dirs()
 Base.metadata.create_all(engine)
 ensure_columns()
@@ -51,6 +54,12 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="HomeOS", version=config.VERSION, lifespan=lifespan)
 
+# la autenticacion solo existe en cloud; en local HomeOS queda abierto en la
+# LAN/Tailnet como siempre (HOMEOS_ENV es el unico selector de modo)
+if config.IS_CLOUD:
+    app.add_middleware(auth.AuthMiddleware)
+
+app.include_router(auth.router)
 app.include_router(apps.router)
 app.include_router(contexts.router)
 app.include_router(todos.router)
