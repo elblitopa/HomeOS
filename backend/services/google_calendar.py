@@ -25,8 +25,12 @@ SCOPE = "https://www.googleapis.com/auth/calendar"
 TIMEOUT = 20
 
 # El callback tiene que coincidir con el registrado en Google Cloud Console.
-# Google solo acepta http:// en localhost, por eso la conexion se hace desde la PC.
-REDIRECT_URI = "http://localhost:8777/api/google/callback"
+# Sale de HOMEOS_PUBLIC_URL: en local es http://localhost:8777 (Google acepta
+# http solo en localhost); en cloud sera el dominio HTTPS (ej. ts.net), que hay
+# que registrar en la consola de Google al desplegar.
+from backend.config import PUBLIC_URL
+
+REDIRECT_URI = f"{PUBLIC_URL}/api/google/callback"
 
 CLIENT_ID_KEY = "google_client_id"
 CLIENT_SECRET_KEY = "google_client_secret"
@@ -110,6 +114,8 @@ def _api(db: Session, method: str, path: str, payload=None, params=None) -> dict
 # ---------- flujo OAuth ----------
 
 def auth_url(db: Session) -> str:
+    from backend.auth import crear_state_oauth
+
     client_id, secret = credentials(db)
     if not client_id or not secret:
         raise GoogleError("Faltan el Client ID y el Client Secret de Google.")
@@ -121,6 +127,9 @@ def auth_url(db: Session) -> str:
         "access_type": "offline",   # para obtener refresh_token
         "prompt": "consent",        # asegura que siempre mande refresh_token
         "include_granted_scopes": "true",
+        # anti-CSRF: el callback exige este state firmado y con expiracion;
+        # sin el, cualquiera podria mandarnos un code ajeno al callback
+        "state": crear_state_oauth(),
     }
     return f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 

@@ -79,8 +79,21 @@ def get_auth_url(db: Session = Depends(get_db)):
 
 
 @router.get("/callback")
-def callback(code: str | None = None, error: str | None = None, db: Session = Depends(get_db)):
-    """Aqui aterriza Google despues de que autorizas; regresa al panel."""
+def callback(
+    code: str | None = None,
+    error: str | None = None,
+    state: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Aqui aterriza Google despues de que autorizas; regresa al panel.
+
+    Este endpoint queda fuera del middleware de cookie (viene redirigido desde
+    Google), pero NO es un bypass: exige el state firmado que genero auth_url.
+    """
+    from backend.auth import state_oauth_valido
+
+    if not state_oauth_valido(state):
+        raise HTTPException(403, "State inválido o expirado. Reinicia la conexión desde Ajustes.")
     if error:
         return RedirectResponse(f"/ajustes?google=error&detalle={error}")
     if not code:
