@@ -4,12 +4,14 @@ import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import useContexts from "../../hooks/useContexts.js";
+import useMode from "../../hooks/useMode.js";
 import { CONTEXT_COLORS } from "../../lib/constants.js";
 import { inputCls } from "../todos/TaskFormModal.jsx";
 import AgentCard from "./AgentCard.jsx";
 import GoogleCard from "./GoogleCard.jsx";
 
 export default function SettingsPage() {
+  const mode = useMode();
   const { contexts, refresh } = useContexts();
   const [webhook, setWebhook] = useState("");
   const [webhookMsg, setWebhookMsg] = useState(null);
@@ -138,6 +140,16 @@ export default function SettingsPage() {
     } catch (e) {
       setCtxError(e.message);
     }
+  };
+
+  const cerrarSesion = async () => {
+    try {
+      await apiPost("/api/auth/logout");
+    } catch {
+      /* aunque falle, soltar la sesión local igual */
+    }
+    // LoginGate escucha este evento y regresa a la pantalla de clave
+    window.dispatchEvent(new CustomEvent("homeos:sin-sesion"));
   };
 
   const toggleBusiness = async (ctx) => {
@@ -373,6 +385,18 @@ export default function SettingsPage() {
           </div>
           {ctxError && <p className="mt-2 text-sm text-err">{ctxError}</p>}
         </GlassCard>
+
+        {mode === "cloud" && (
+          <GlassCard className="p-5">
+            <h2 className="mb-1 font-semibold">Sesión</h2>
+            <p className="mb-3 text-sm text-ink-soft">
+              Cierra la sesión de este dispositivo. Volverás a la pantalla de clave.
+            </p>
+            <Button variant="ghost" onClick={cerrarSesion}>
+              Cerrar sesión
+            </Button>
+          </GlassCard>
+        )}
       </div>
     </div>
   );

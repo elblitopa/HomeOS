@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
+import useMode from "../../hooks/useMode.js";
 
 const DEVICE_ID = "pc-principal";
 
@@ -18,6 +19,7 @@ function haceCuanto(iso) {
 }
 
 export default function AgentCard() {
+  const mode = useMode(); // el token solo puede generarse en cloud
   const [agente, setAgente] = useState(null); // fila de /api/agents o null
   const [cargado, setCargado] = useState(false);
   const [token, setToken] = useState(null); // SOLO vive en memoria de esta vista
@@ -121,9 +123,16 @@ export default function AgentCard() {
         </div>
       )}
 
-      <Button onClick={generar} disabled={busy}>
-        {agente ? "Regenerar token" : "Generar token"}
-      </Button>
+      {mode === "cloud" ? (
+        <Button onClick={generar} disabled={busy}>
+          {agente ? "Regenerar token" : "Generar token"}
+        </Button>
+      ) : (
+        <p className="text-sm text-ink-soft">
+          El token del agente se genera desde HomeOS Cloud (aquí en local no
+          hay login, así que este panel no emite credenciales).
+        </p>
+      )}
       {error && <p className="mt-2 text-sm text-err">{error}</p>}
     </GlassCard>
   );
