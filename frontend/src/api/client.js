@@ -12,7 +12,11 @@ async function handle(res) {
     } catch {
       /* respuesta sin JSON */
     }
-    throw new Error(detail);
+    const err = new Error(detail);
+    // el status viaja con el error: un 409 de "accion en curso" no se trata
+    // igual que un fallo real, y sin esto el caller solo tendria texto
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
