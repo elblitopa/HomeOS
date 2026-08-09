@@ -27,22 +27,6 @@ def port_open(port: int, timeout: float = 0.4) -> bool:
         return False
 
 
-def pid_listening_on(port: int) -> int | None:
-    """El PID que escucha el puerto; para el fallback de STOP_APP."""
-    try:
-        for conn in psutil.net_connections(kind="tcp"):
-            if (
-                conn.laddr
-                and conn.laddr.port == port
-                and conn.status == psutil.CONN_LISTEN
-                and conn.pid
-            ):
-                return conn.pid
-    except (psutil.AccessDenied, OSError):
-        pass
-    return None
-
-
 def app_status(entry: dict, pid: int | None) -> dict:
     """Estado de UNA app aprobada. `pid` es el que ESTE agente lanzó (o None)."""
     vivo = pid_alive(pid)

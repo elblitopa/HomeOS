@@ -51,14 +51,14 @@ class Backoff:
 
 
 def _heartbeat_payload(config: AgentConfig) -> dict:
-    state = executor._load_state()
+    pids = executor.pids_registrados()
     return {
         "name": config.name or config.device_id,
         "platform": "windows",
         "version": VERSION,
         "agent_host": socket.gethostname(),
         "apps": {
-            app_id: st.app_status(entry, state.get(app_id))
+            app_id: st.app_status(entry, pids.get(app_id))
             for app_id, entry in allowlist.approved_apps().items()
         },
     }

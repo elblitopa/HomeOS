@@ -20,11 +20,21 @@ import os
 import subprocess
 import time
 
+import psutil
+
 from agent import allowlist
 from agent.config import AgentConfig, DATA_DIR
 from agent import status as st
 
-STATE_FILE = DATA_DIR / "state.json"  # {app_id: pid} de lo que ESTE agente lanzó
+# Lo que ESTE agente lanzó: {app_id: {pid, create_time, bat}}.
+# create_time es el fingerprint contra la reutilización de PIDs: Windows
+# recicla números de PID (sobre todo tras un reinicio), pero un PID reciclado
+# jamás conserva el create_time del proceso original.
+STATE_FILE = DATA_DIR / "state.json"
+
+# tolerancia al comparar create_time (float de epoch): el mismo proceso
+# devuelve el mismo valor; esto solo absorbe redondeos de serialización
+CREATE_TIME_TOLERANCE_S = 1.0
 
 CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -43,24 +53,67 @@ class CommandRejected(Exception):
     """Comando que NO se ejecuta. El mensaje es seguro para mandarse al cloud."""
 
 
-# ---------- estado local de PIDs (persistente, sin secretos) ----------
+# ---------- estado local de procesos (persistente, sin secretos) ----------
 
 
-def _load_state() -> dict[str, int]:
+def _load_state() -> dict[str, dict]:
     if not STATE_FILE.is_file():
         return {}
     try:
         data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        return {k: int(v) for k, v in data.items()} if isinstance(data, dict) else {}
-    except (json.JSONDecodeError, ValueError, OSError):
+    except (json.JSONDecodeError, OSError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    # solo entradas completas: sin fingerprint no hay identidad verificable
+    return {
+        k: v
+        for k, v in data.items()
+        if isinstance(v, dict) and isinstance(v.get("pid"), int)
+        and isinstance(v.get("create_time"), (int, float))
+    }
 
 
-def _save_state(state: dict[str, int]) -> None:
+def _save_state(state: dict[str, dict]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = STATE_FILE.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
     os.replace(tmp, STATE_FILE)
+
+
+def pids_registrados() -> dict[str, int]:
+    """{app_id: pid} de lo lanzado por este agente (para status/heartbeat)."""
+    return {app_id: e["pid"] for app_id, e in _load_state().items()}
+
+
+def _proceso_verificado(registro: dict) -> psutil.Process | None:
+    """El proceso SOLO si su identidad coincide con lo que este agente lanzó.
+
+    Verificación en capas:
+    1. el PID debe existir;
+    2. su create_time debe coincidir con el persistido (mata el PID-reuse:
+       un PID reciclado, incluso tras reiniciar Windows, nunca conserva el
+       create_time original);
+    3. si el cmdline es legible, debe mencionar el launcher autorizado que
+       lanzamos (cmd.exe /c <bat>); si no es legible (AccessDenied), el
+       fingerprint del paso 2 ya dio certeza suficiente.
+
+    Cualquier duda -> None -> NO se mata nada.
+    """
+    try:
+        p = psutil.Process(registro["pid"])
+        if abs(p.create_time() - registro["create_time"]) > CREATE_TIME_TOLERANCE_S:
+            return None
+        try:
+            cmdline = " ".join(p.cmdline()).lower()
+            bat = str(registro.get("bat", "")).lower()
+            if cmdline and bat and bat not in cmdline:
+                return None
+        except (psutil.AccessDenied, OSError):
+            pass  # el create_time ya coincidió; cmdline es la capa extra
+        return p
+    except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+        return None
 
 
 # ---------- validación (segunda línea; la primera fue el cloud) ----------
@@ -122,7 +175,8 @@ def start_app(app_id: str) -> dict:
     folder, launcher, port = entry["folder"], entry["launcher"], entry["port"]
 
     state = _load_state()
-    if st.pid_alive(state.get(app_id)) or st.port_open(port):
+    registro = state.get(app_id)
+    if (registro and _proceso_verificado(registro)) or st.port_open(port):
         return {"started": False, "detail": "La app ya estaba corriendo"}
 
     if not os.path.isdir(folder):
@@ -142,8 +196,15 @@ def start_app(app_id: str) -> dict:
         # el detalle completo queda en el log local; al cloud va lo seguro
         raise CommandRejected("Windows no pudo lanzar la app (ver log local)")
 
-    state[app_id] = proc.pid
-    _save_state(state)
+    # el fingerprint queda persistido ANTES de reportar: sin él, este proceso
+    # sería imposible de detener con certeza después de un reinicio del agente
+    try:
+        create_time = psutil.Process(proc.pid).create_time()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+        create_time = None
+    if create_time is not None:
+        state[app_id] = {"pid": proc.pid, "create_time": create_time, "bat": bat}
+        _save_state(state)
 
     # una app que truena al instante no debe reportarse como iniciada
     time.sleep(STARTUP_GRACE_S)
@@ -165,44 +226,54 @@ def _kill_tree(pid: int) -> bool:
 
 
 def stop_app(app_id: str) -> dict:
-    """Detiene una app APROBADA. El PID sale del estado propio, NUNCA del cloud.
+    """Detiene una app APROBADA solo con identidad VERIFICADA del proceso.
 
-    Orden de certeza:
-    1) el PID que este agente lanzó (si sigue vivo) -> taskkill del árbol;
-    2) el PID que escucha el puerto AUTORIZADO de la app -> taskkill del árbol;
-    3) nada corriendo -> se reporta, no es error fatal.
+    Política: un puerto ocupado NUNCA es autoridad suficiente para matar.
+    Solo se hace taskkill /T /F cuando el proceso raíz es comprobadamente el
+    que ESTE agente lanzó (PID existe + create_time coincide + cmdline apunta
+    al launcher autorizado cuando es legible — ver _proceso_verificado). El
+    /T cierra el árbol completo (cmd.exe y sus hijos legítimos), pero la
+    validación es siempre sobre el proceso raíz lanzado.
+
+    Sin certeza -> NO se mata nada y se reporta unknown_process. El puerto
+    solo se usa como información (¿hay algo ahí?), jamás como blanco.
     """
     entry = _app_aprobada(app_id)
     state = _load_state()
-    pid = state.get(app_id)
+    registro = state.get(app_id)
 
-    if st.pid_alive(pid):
-        ok = _kill_tree(pid)
+    if registro:
+        proceso = _proceso_verificado(registro)
+        if proceso:
+            ok = _kill_tree(proceso.pid)
+            state.pop(app_id, None)
+            _save_state(state)
+            if ok:
+                return {"stopped": True, "status": "stopped", "method": "taskkill_tree"}
+            raise CommandRejected("taskkill no pudo detener el proceso (ver log local)")
+        # el registro ya no describe un proceso verificable (murió, o el PID
+        # fue reciclado por Windows y el fingerprint no coincide): limpiar
         state.pop(app_id, None)
         _save_state(state)
-        if ok:
-            return {"stopped": True, "method": "taskkill_tree"}
-        raise CommandRejected("taskkill no pudo detener el proceso (ver log local)")
 
-    if pid is not None:
-        state.pop(app_id, None)  # PID muerto: limpiar
-        _save_state(state)
+    if st.port_open(entry["port"]):
+        # hay ALGO en el puerto de la app, pero no podemos probar que sea
+        # nuestro (agente reiniciado, PID reciclado, u otro programa): no matar
+        return {
+            "stopped": False,
+            "status": "unknown_process",
+            "detail": "No se pudo verificar que el proceso pertenezca a esta app",
+        }
 
-    pid_puerto = st.pid_listening_on(entry["port"])
-    if pid_puerto:
-        if _kill_tree(pid_puerto):
-            return {"stopped": True, "method": "port_lookup"}
-        raise CommandRejected("taskkill no pudo detener el proceso (ver log local)")
-
-    return {"stopped": False, "method": "not_running"}
+    return {"stopped": False, "status": "not_running", "method": "not_running"}
 
 
 def get_status() -> dict:
     """{app_id: {running, port_open, pid}} SOLO de las apps aprobadas."""
-    state = _load_state()
+    pids = pids_registrados()
     return {
         "apps": {
-            app_id: st.app_status(entry, state.get(app_id))
+            app_id: st.app_status(entry, pids.get(app_id))
             for app_id, entry in allowlist.approved_apps().items()
         }
     }
