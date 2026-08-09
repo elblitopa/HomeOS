@@ -32,9 +32,12 @@ from agent import status as st
 # jamás conserva el create_time del proceso original.
 STATE_FILE = DATA_DIR / "state.json"
 
-# tolerancia al comparar create_time (float de epoch): el mismo proceso
-# devuelve el mismo valor; esto solo absorbe redondeos de serialización
-CREATE_TIME_TOLERANCE_S = 1.0
+# tolerancia al comparar create_time (float de epoch). psutil lo saca de
+# GetProcessTimes (resolución de 100 ns) y json.dump/load preserva el float
+# EXACTO (roundtrip de IEEE-754), así que el mismo proceso siempre devuelve
+# el mismo valor: 10 ms solo absorbe cualquier redondeo teórico sin abrirle
+# la puerta a un PID reciclado.
+CREATE_TIME_TOLERANCE_S = 0.01
 
 CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
