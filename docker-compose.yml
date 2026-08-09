@@ -1,0 +1,34 @@
+# ============================================================
+# HomeOS Cloud en la VM (Google Compute Engine e2-micro).
+#
+# - El puerto SOLO se publica en 127.0.0.1 del host: nadie de
+#   Internet puede llegar; la única puerta es Tailscale Serve
+#   (que corre en el HOST y proxya https -> 127.0.0.1:8777).
+# - /opt/homeos/data (host) es la verdad: homeos.db + uploads/.
+#   El contenedor puede destruirse y recrearse sin perder nada.
+# - Los secretos viven en /opt/homeos/.env del host, no en la imagen.
+#
+# Comandos de operación (desde /opt/homeos/app):
+#   arrancar:    docker compose up -d
+#   detener:     docker compose down
+#   reiniciar:   docker compose restart
+#   logs:        docker compose logs -f --tail 100
+#   estado:      docker compose ps
+#   actualizar:  git pull && docker compose build && docker compose up -d
+# ============================================================
+
+services:
+  homeos:
+    build: .
+    container_name: homeos
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8777:8777"
+    env_file:
+      - /opt/homeos/.env
+    environment:
+      TZ: America/Mexico_City
+      HOMEOS_ENV: cloud
+      HOMEOS_DATA_DIR: /app/data
+    volumes:
+      - /opt/homeos/data:/app/data

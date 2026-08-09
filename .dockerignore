@@ -1,0 +1,30 @@
+# La imagen cloud lleva SOLO backend + Apps/ + frontend (que se compila en
+# su propia etapa). Todo lo demás — datos, secretos, el Windows Agent, el
+# venv de la PC — se queda fuera a propósito.
+.git
+.gitignore
+.claude
+venv
+__pycache__
+**/__pycache__
+*.pyc
+
+# datos y secretos: JAMÁS dentro de la imagen
+data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# el Windows Agent corre en la PC, no en el cloud
+agent
+
+# el frontend se compila en la etapa Node (aquí solo estorban)
+frontend/node_modules
+frontend/dist
+
+# utilería de Windows / docs que no necesita el runtime
+*.bat
+*.md
+scripts
