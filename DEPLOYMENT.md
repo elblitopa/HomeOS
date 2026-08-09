@@ -63,12 +63,21 @@ sudo mkdir -p /opt/homeos/data /opt/homeos/backups
 sudo chown -R "$USER":"$USER" /opt/homeos
 ```
 
-## PARTE 3 — Instalar Docker
+## PARTE 3 — Instalar Docker (repositorio APT oficial)
 
-Script oficial de Docker (incluye compose):
+VM de producción = Docker Engine + Compose plugin desde el repositorio APT
+OFICIAL de Docker para Debian 12 (no el script get.docker.com), siguiendo la
+documentación vigente de docs.docker.com:
 
 ```bash
-curl -fsSL https://get.docker.com | sudo sh
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker "$USER"
 ```
 
@@ -76,6 +85,7 @@ Cierra la sesión SSH y vuelve a entrar (para que aplique el grupo). Verifica:
 
 ```bash
 docker --version && docker compose version
+sudo systemctl status docker --no-pager | head -5
 ```
 
 ## PARTE 4 — Instalar y conectar Tailscale (en el HOST, no en Docker)
@@ -97,13 +107,22 @@ sudo tailscale up --ssh
 - MagicDNS debe estar activado (DNS → MagicDNS en la consola de Tailscale);
   ahí mismo ves tu dominio `<tailnet>.ts.net`.
 
-**Firewall (objetivo: cero acceso público):**
-Una vez que Tailscale SSH funcione (prueba desde tu PC:
-`tailscale ssh usuario@homeos-cloud`), cierra el SSH público en Google Cloud:
-consola → VPC network → Firewall → deshabilita/borra la regla
-`default-allow-ssh` (o restríngela a la IP `35.235.240.0/20` de IAP si
-prefieres conservar el botón SSH de la consola). No crees NINGUNA regla que
-abra 8777, 80 ni 443: no hacen falta — Tailscale usa túneles salientes.
+**Firewall (objetivo: cero acceso público — paso OBLIGATORIO, no opcional):**
+`default-allow-ssh` (TCP/22 desde 0.0.0.0/0) solo se tolera durante el
+bootstrap. El orden importa para no quedarse fuera:
+1. instalar Tailscale y autorizar `homeos-cloud`;
+2. confirmar `tailscale status`;
+3. confirmar desde la PC que `ssh usuario@homeos-cloud` entra por Tailscale SSH;
+4. SOLO ENTONCES cerrar el SSH público. En Cloud Shell:
+   ```bash
+   gcloud compute firewall-rules delete default-allow-ssh --quiet
+   ```
+   (o restringirla a `35.235.240.0/20` de IAP si quieres conservar el botón
+   SSH de la consola:
+   `gcloud compute firewall-rules update default-allow-ssh --source-ranges=35.235.240.0/20`)
+
+Jamás crear reglas que abran **8777, 80 ni 443**: no hacen falta — Tailscale
+usa túneles salientes y Serve entra por la tailnet.
 
 ## PARTE 5 — Clonar HomeOS
 
