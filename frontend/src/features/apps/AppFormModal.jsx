@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { apiPost, apiPut, apiUpload } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
+import { mensajeDeBrowse, waitCommand } from "../../lib/agentCommands.js";
 
 const EMPTY = { name: "", folder: "", launcher: "", port: "", icon_path: null, banner_path: null };
 
-export default function AppFormModal({ open, app, onClose, onSaved }) {
+export default function AppFormModal({ open, app, mode, agentOnline = true, onClose, onSaved }) {
+  const isCloud = mode === "cloud";
   const [form, setForm] = useState(EMPTY);
   const [browse, setBrowse] = useState(null);
   const [browsing, setBrowsing] = useState(false);
@@ -22,13 +24,25 @@ export default function AppFormModal({ open, app, onClose, onSaved }) {
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
+  const aplicarBrowse = (data) => {
+    setBrowse(data);
+    setForm((f) => ({ ...f, folder: data.path }));
+  };
+
   const doBrowse = async (path) => {
+    if (isCloud && !agentOnline) return; // sin PC no hay nada que pedir
     setBrowsing(true);
     setError(null);
     try {
       const data = await apiPost("/api/apps/browse", { path: path ?? form.folder });
-      setBrowse(data);
-      setForm((f) => ({ ...f, folder: data.path }));
+      if (data.queued) {
+        // cloud: el listado lo produce el Agent; esperar el desenlace real
+        const cmd = await waitCommand(data.command_id);
+        if (cmd.status !== "done") throw new Error(mensajeDeBrowse(cmd));
+        aplicarBrowse(cmd.result);
+      } else {
+        aplicarBrowse(data); // local: respuesta directa, como siempre
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -98,11 +112,31 @@ export default function AppFormModal({ open, app, onClose, onSaved }) {
               onChange={set("folder")}
               placeholder="C:\Users\pablo\OneDrive\Documents\Proyectos\..."
             />
-            <Button variant="ghost" onClick={() => doBrowse()} disabled={browsing}>
-              Explorar
+            <Button
+              variant="ghost"
+              onClick={() => doBrowse()}
+              disabled={browsing || (isCloud && !agentOnline)}
+              title={
+                isCloud && !agentOnline
+                  ? "PC Principal está desconectada. Enciéndela para explorar sus carpetas."
+                  : undefined
+              }
+            >
+              {browsing ? "Explorando…" : "Explorar"}
             </Button>
           </div>
+          {isCloud && !agentOnline && (
+            <span className="text-xs font-normal text-ink-soft">
+              PC Principal está desconectada. Enciéndela para explorar sus carpetas.
+            </span>
+          )}
         </label>
+
+        {browsing && (
+          <p className="text-xs text-ink-soft">
+            Consultando las carpetas de la PC…
+          </p>
+        )}
 
         {browse && (
           <div className="max-h-44 overflow-y-auto rounded-xl border border-glass-border bg-surface/60 p-2 text-sm">
@@ -173,6 +207,15 @@ export default function AppFormModal({ open, app, onClose, onSaved }) {
             <input type="file" accept="image/*" onChange={upload("banner")} className="text-xs" />
           </label>
         </div>
+
+        {isCloud && (
+          <p className="rounded-xl bg-ink/5 px-3 py-2 text-xs text-ink-soft">
+            Estos datos son la configuración deseada. La PC solo ejecuta lo que
+            esté aprobado en su allowlist local: si cambias carpeta o launcher,
+            recuerda aprobarlo en la PC con{" "}
+            <code>python -m agent approve {app?.slug || "<app>"}</code>.
+          </p>
+        )}
 
         {error && <p className="text-sm text-err">{error}</p>}
 
