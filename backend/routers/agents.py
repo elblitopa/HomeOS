@@ -10,6 +10,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.config import IS_CLOUD
 from backend.database import get_db
 from backend.models import Agent, AgentCommand
 from backend.routers.agent_bridge import hash_token
@@ -37,7 +38,18 @@ def generate_token(device_id: str, db: Session = Depends(get_db)):
       si se pierde, se regenera.
     - Regenerar reemplaza el hash: el token anterior deja de autenticar en el
       mismo instante.
+    - SOLO existe en modo cloud: en local HomeOS deliberadamente no exige
+      autenticación (LAN/Tailnet), y un endpoint que emite credenciales no
+      puede vivir en una superficie sin login. En local se rechaza sin tocar
+      token_hash.
     """
+    if not IS_CLOUD:
+        raise HTTPException(
+            409,
+            "Los tokens de agente solo se generan desde HomeOS Cloud "
+            "(HOMEOS_ENV=cloud). Esta instancia local no exige login, así que "
+            "aquí este endpoint está deshabilitado.",
+        )
     if device_id not in KNOWN_DEVICES:
         raise HTTPException(404, "Dispositivo desconocido")
     token = secrets.token_urlsafe(48)  # 384 bits de entropía
