@@ -1,7 +1,12 @@
+"""Arranque/paro directo de apps: SOLO se usa en modo local (Windows).
+
+psutil se importa DENTRO de las funciones a propósito: en cloud este módulo
+se importa (por los routers) pero jamás se ejecuta, y la imagen Docker del
+cloud no instala psutil — un import a nivel de módulo la rompería.
+"""
+
 import os
 import subprocess
-
-import psutil
 
 CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 
@@ -21,6 +26,8 @@ def start_app(folder: str, launcher: str) -> int:
 
 
 def pid_alive(pid: int) -> bool:
+    import psutil
+
     try:
         return psutil.Process(pid).is_running()
     except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -28,6 +35,8 @@ def pid_alive(pid: int) -> bool:
 
 
 def pid_listening_on(port: int) -> int | None:
+    import psutil
+
     try:
         for conn in psutil.net_connections(kind="tcp"):
             if (

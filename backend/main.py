@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -31,6 +32,13 @@ from backend.routers.apps import run_manifest_import
 from backend.services import fx
 from backend.services.scheduler import reminder_loop
 
+# los loggers propios (homeos.*) a INFO: sin esto el root logger queda en
+# WARNING y el "scheduler iniciado" jamás aparecería en docker logs. Formato
+# corto y sin datos sensibles; los de uvicorn conservan su propia config.
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s"
+)
+
 # en cloud, sin secretos NO se arranca: mejor un error claro que un panel publico
 config.validate_cloud_config()
 
@@ -49,6 +57,15 @@ with SessionLocal() as db:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # sanity log de arranque (sin secretos): confirma modo, datos y zona horaria
+    import time
+
+    logging.getLogger("homeos").info(
+        "HomeOS %s arrancó en modo %s | data=%s | tz=%s",
+        config.VERSION, config.HOMEOS_ENV, config.DATA_DIR, time.strftime("%Z %z"),
+    )
+    # UN solo task del scheduler por proceso; con uvicorn en 1 worker (como
+    # exige el deployment) eso significa UNA sola instancia en total
     task = asyncio.create_task(reminder_loop())
     yield
     task.cancel()
