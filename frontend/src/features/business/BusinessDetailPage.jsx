@@ -12,6 +12,7 @@ import PaymentsSection from "./PaymentsSection.jsx";
 import ProjectsSection from "./ProjectsSection.jsx";
 import ProvidersSection from "./ProvidersSection.jsx";
 import SectionCardsView from "./SectionCardsView.jsx";
+import { miniatura } from "../../components/ui/Comprobante.jsx";
 import {
   CompetitorsSection,
   CrmSection,
@@ -179,7 +180,7 @@ export default function BusinessDetailPage() {
       {negocio.banner_path && (
         <div
           className="mb-4 h-28 rounded-2xl bg-cover bg-center md:h-36"
-          style={{ backgroundImage: `url(${negocio.banner_path})` }}
+          style={{ backgroundImage: `url(${miniatura(negocio.banner_path, 640)})` }}
         />
       )}
 

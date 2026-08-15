@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiDelete, apiPost } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
+import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import StatusPill from "../../components/ui/StatusPill.jsx";
 import { mensajeDeComando, waitCommand } from "../../lib/agentCommands.js";
@@ -175,14 +176,18 @@ export default function AppCard({ app, status, ping, mode, agent, onEdit, onChan
         : "stopped";
 
   return (
-    <GlassCard banner={app.banner_path} className="flex flex-col">
+    <GlassCard banner={miniatura(app.banner_path, 640)} className="flex flex-col">
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3">
             {app.icon_path ? (
               <img
-                src={app.icon_path}
+                src={miniatura(app.icon_path, 96)}
                 alt=""
+                width={40}
+                height={40}
+                loading="lazy"
+                decoding="async"
                 className="h-10 w-10 rounded-xl object-cover"
               />
             ) : (

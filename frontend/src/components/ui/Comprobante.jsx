@@ -11,9 +11,11 @@ export const ES_PDF = /\.pdf$/i;
 const LADO_ZOOM = 280;
 
 /** Los comprobantes vienen de la cámara y pesan varios MB: el servidor los
- *  encoge y cachea para no descargar el original solo para pintar 44 px. */
+ *  encoge y cachea para no descargar el original solo para pintar 44 px.
+ *  Con path vacío devuelve el mismo valor falsy, para que los llamadores
+ *  puedan pasar rutas opcionales sin ternarios repetidos. */
 export const miniatura = (path, ancho) =>
-  `/api/uploads/thumb?path=${encodeURIComponent(path)}&w=${ancho}`;
+  path ? `/api/uploads/thumb?path=${encodeURIComponent(path)}&w=${ancho}` : path;
 
 /** Archivo adjunto de una fila: miniatura de 44 px y, si es imagen o video,
  *  una vista grande al pasar el mouse. Lo usan las transacciones y los

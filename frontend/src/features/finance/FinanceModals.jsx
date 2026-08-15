@@ -15,6 +15,7 @@ import {
 } from "../../lib/constants.js";
 
 import { inputCls } from "../todos/TaskFormModal.jsx";
+import { miniatura } from "../../components/ui/Comprobante.jsx";
 
 const selectCls = inputCls;
 
@@ -317,7 +318,7 @@ export function AccountModal({ open, account, onClose, onSaved }) {
             <div className="flex items-center gap-2">
               <div
                 className="h-14 flex-1 rounded-xl bg-cover bg-center"
-                style={{ backgroundImage: `url(${form.banner_path})` }}
+                style={{ backgroundImage: `url(${miniatura(form.banner_path, 640)})` }}
               />
               <button
                 className="text-err"
@@ -766,7 +767,7 @@ export function GoalModal({ open, goal, onClose, onSaved }) {
             <div className="flex items-center gap-2">
               <div
                 className="h-14 flex-1 rounded-xl bg-cover bg-center"
-                style={{ backgroundImage: `url(${form.banner_path})` }}
+                style={{ backgroundImage: `url(${miniatura(form.banner_path, 640)})` }}
               />
               <button
                 className="text-err"

@@ -3,6 +3,7 @@ import { apiGet, apiPost } from "../../api/client.js";
 import useCardSort from "../../hooks/useCardSort.js";
 import Button from "../../components/ui/Button.jsx";
 import Carousel from "../../components/ui/Carousel.jsx";
+import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { COLOR_TIPO, IconoTipo } from "../../components/ui/TipoBadge.jsx";
 import { BASE_CURRENCY, fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
@@ -214,7 +215,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                     {section.items.map((a) => (
                       <GlassCard
                         key={a.id}
-                        banner={a.banner_path}
+                        banner={miniatura(a.banner_path, 640)}
                         data-sort-id={a.id}
                         data-sort-group={section.key}
                         className={`relative cursor-pointer transition hover:bg-surface/75 ${
@@ -335,7 +336,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                   {g.banner_path ? (
                     <div
                       className="h-24 w-full bg-cover bg-center"
-                      style={{ backgroundImage: `url(${g.banner_path})` }}
+                      style={{ backgroundImage: `url(${miniatura(g.banner_path, 640)})` }}
                     />
                   ) : (
                     <div className="h-24 w-full bg-gradient-to-br from-accent/25 to-accent/5" />

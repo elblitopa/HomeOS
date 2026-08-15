@@ -3,6 +3,7 @@ import { apiDelete, apiPost, apiPut, apiUpload } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import { inputCls } from "../todos/TaskFormModal.jsx";
+import { miniatura } from "../../components/ui/Comprobante.jsx";
 
 const PALETA = [
   "#2383e2", "#0ca678", "#9c36b5", "#e8590c", "#f59e0b",
@@ -136,7 +137,7 @@ export default function BusinessFormModal({ open, business, onClose, onSaved, on
             <div className="flex items-center gap-2">
               <div
                 className="h-14 flex-1 rounded-xl bg-cover bg-center"
-                style={{ backgroundImage: `url(${form.banner_path})` }}
+                style={{ backgroundImage: `url(${miniatura(form.banner_path, 640)})` }}
               />
               <button
                 className="text-err"

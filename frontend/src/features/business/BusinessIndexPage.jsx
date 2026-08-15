@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiPost } from "../../api/client.js";
 import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
+import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import useCardSort from "../../hooks/useCardSort.js";
 import useContexts from "../../hooks/useContexts.js";
@@ -62,7 +63,7 @@ export default function BusinessIndexPage() {
           {ordered.map((n) => (
             <GlassCard
               key={n.id}
-              banner={n.banner_path}
+              banner={miniatura(n.banner_path, 640)}
               data-sort-id={n.id}
               className={`relative cursor-pointer transition hover:bg-surface/75 ${
                 draggingId === String(n.id) ? "scale-[0.98] opacity-60 ring-2 ring-accent" : ""

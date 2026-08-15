@@ -4,6 +4,7 @@ import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { formatDateTime } from "../../lib/constants.js";
+import { miniatura } from "../../components/ui/Comprobante.jsx";
 
 const KINDS = [
   { key: "", label: "Todos" },
@@ -138,7 +139,7 @@ export default function FilesPage() {
                 {f.kind === "imagen" ? (
                   <div
                     className="h-32 w-full bg-cover bg-center"
-                    style={{ backgroundImage: `url(${f.file_path})` }}
+                    style={{ backgroundImage: `url(${miniatura(f.file_path, 640)})` }}
                   />
                 ) : f.kind === "video" ? (
                   <video src={f.file_path} className="h-32 w-full object-cover" muted />
