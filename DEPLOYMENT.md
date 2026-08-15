@@ -307,6 +307,20 @@ Hace backup **consistente** de la DB con `sqlite3 .backup` (dentro del
 contenedor, seguro aunque HomeOS esté escribiendo) + `uploads-*.tar.gz`, y
 conserva los últimos **7** de cada uno.
 
+> ⚠️ **Alcance:** esto es *backup local de producción* — protege contra
+> corrupción de la DB o error humano (borrar algo por accidente). **NO es
+> disaster recovery completo**: los backups viven en el disco de la MISMA VM;
+> si la VM o su disco se pierden, se pierden con ella. Pendiente futuro:
+> **backup externo/off-VM de HomeOS Cloud** (p. ej. Cloud Storage u otro
+> destino). Mientras tanto, la copia congelada de la PC
+> (`homeos-backup-pre-cloud-*`) es la red de seguridad externa.
+>
+> Verificar un backup de DB sin tocarlo (abre en WAL, requiere `immutable`):
+> ```bash
+> docker run --rm -v /opt/homeos/backups:/b:ro app-homeos \
+>   sqlite3 "file:/b/homeos-FECHA.db?immutable=1" "PRAGMA integrity_check;"
+> ```
+
 **Restaurar un backup:**
 
 ```bash
