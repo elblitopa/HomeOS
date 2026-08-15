@@ -1,10 +1,15 @@
 import asyncio
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+
+# algunos sistemas (el contenedor incluido) no traen el mapping de webp y las
+# miniaturas saldrían como application/octet-stream desde el mount estático
+mimetypes.add_type("image/webp", ".webp")
 
 from backend import auth, config
 from backend.database import Base, SessionLocal, engine, ensure_columns
@@ -96,7 +101,29 @@ app.include_router(settings.router)
 app.include_router(uploads.router)
 app.include_router(system.router)
 
-app.mount("/uploads", StaticFiles(directory=config.UPLOADS_DIR), name="uploads")
+class UploadsEstaticos(StaticFiles):
+    """/uploads con cache HTTP correcto y PRIVADO.
+
+    - `private`: los uploads son contenido AUTENTICADO (comprobantes, fotos
+      personales); solo el navegador del usuario puede guardarlos, jamás un
+      cache compartido/proxy.
+    - `immutable` para icons/banners/files: sus nombres son UUID únicos, el
+      contenido de una URL dada no cambia nunca — un año de cache es seguro.
+    - thumbs/ se regeneran bajo el MISMO nombre si el original cambia, así
+      que llevan cache corto (7 días) sin immutable.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code in (200, 304):
+            if path.replace("\\", "/").startswith("thumbs/"):
+                response.headers["Cache-Control"] = "private, max-age=604800"
+            else:
+                response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+        return response
+
+
+app.mount("/uploads", UploadsEstaticos(directory=config.UPLOADS_DIR), name="uploads")
 
 if (config.FRONTEND_DIST / "assets").is_dir():
     app.mount(

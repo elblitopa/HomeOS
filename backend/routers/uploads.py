@@ -87,8 +87,10 @@ def thumb(path: str = Query(..., description="ruta publica, ej. /uploads/files/x
             log.warning("No se pudo generar la miniatura de %s", origen.name, exc_info=True)
             return FileResponse(origen)
 
+    # private: los uploads son contenido autenticado (comprobantes, fotos);
+    # solo el navegador del usuario puede cachearlos, jamás un cache compartido
     return FileResponse(cache, media_type="image/webp",
-                        headers={"Cache-Control": "public, max-age=604800"})
+                        headers={"Cache-Control": "private, max-age=604800"})
 
 
 @router.post("/file")
