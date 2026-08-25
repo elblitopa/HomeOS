@@ -163,8 +163,15 @@ def _desaparecio(e: gcal.GoogleError) -> bool:
 
 def sync(db: Session) -> dict:
     """Empareja Google con HomeOS. Nunca lanza: los errores se reportan."""
-    if not gcal.is_connected(db):
+    situacion = gcal.estado(db)
+    if situacion == "no_conectado":
         return {"omitido": "no hay cuenta de Google conectada"}
+    if situacion == "requiere_reconexion":
+        # el refresh token ya fue rechazado: insistir cada minuto solo
+        # generaría ruido. El aviso se logueó UNA vez al marcarse; aquí se
+        # sale en silencio y los google_links quedan intactos para retomar
+        # sin duplicados cuando el usuario reconecte.
+        return {"omitido": "Google requiere reconexión (Ajustes → Reconectar)"}
 
     destino = gcal.calendar_id(db)
     quiero = _deseado(db)

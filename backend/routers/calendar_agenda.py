@@ -94,7 +94,7 @@ def agenda(
             add("evento", e.id, e.title, e.start, e.description, e.context_id,
                 {"all_day": e.all_day, "end": e.end.isoformat() if e.end else None})
 
-    if "google" in wanted and gcal.is_connected(db):
+    if "google" in wanted and gcal.estado(db) == "conectado":
         try:
             for e in gcal.list_events(db, desde, hasta):
                 add("google", e["id"], e["title"], e["start"],

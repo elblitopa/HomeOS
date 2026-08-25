@@ -38,10 +38,13 @@ class EventPayload(BaseModel):
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
     client_id, secret = gcal.credentials(db)
-    conectado = gcal.is_connected(db)
+    estado = gcal.estado(db)  # no_conectado | requiere_reconexion | conectado
     info = {
         "has_credentials": bool(client_id and secret),
-        "connected": conectado,
+        # connected se conserva por compatibilidad, pero la UI decide por
+        # `estado`: un token guardado que Google ya rechazó NO es "conectado"
+        "connected": gcal.is_connected(db),
+        "estado": estado,
         "client_id": client_id,
         "redirect_uri": gcal.REDIRECT_URI,
         "calendar_id": gcal.calendar_id(db),
@@ -49,11 +52,13 @@ def status(db: Session = Depends(get_db)):
         "visible_calendars": gcal.visible_calendars(db),
         "error": None,
     }
-    if conectado:
+    if estado == "conectado":
         try:
             info["calendars"] = gcal.calendars(db)
         except gcal.GoogleError as e:
             info["error"] = str(e)
+            # si ESTA llamada acaba de descubrir el invalid_grant, reflejarlo
+            info["estado"] = gcal.estado(db)
     return info
 
 

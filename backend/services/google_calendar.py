@@ -37,6 +37,12 @@ CLIENT_SECRET_KEY = "google_client_secret"
 TOKEN_KEY = "google_token"
 CALENDAR_KEY = "google_calendar_id"        # donde se guardan los eventos nuevos
 VISIBLE_KEY = "google_visible_calendars"   # cuales se muestran en el calendario
+# estado del refresh token: None/"ok" mientras sirve; "requires_reconnect"
+# cuando Google lo rechazo con invalid_grant (caduca a los 7 dias porque el
+# OAuth del proyecto esta en modo Testing — decision deliberada de Pablo).
+# Con el flag puesto NADIE vuelve a intentar refresh hasta reconectar.
+TOKEN_STATUS_KEY = "google_token_status"
+REQUIERE_RECONEXION = "requires_reconnect"
 
 
 # marca que HomeOS deja en los eventos que el mismo crea, para reconocerlos
@@ -68,8 +74,38 @@ def is_connected(db: Session) -> bool:
     return bool(_token(db).get("refresh_token"))
 
 
+def estado(db: Session) -> str:
+    """Estado REAL de la conexión, no solo "hay un token guardado".
+
+    - "no_conectado":         sin refresh_token en la base.
+    - "requiere_reconexion":  hay token pero Google ya lo rechazó
+                              (invalid_grant); reconectar es lo único útil.
+    - "conectado":            token presente y sin rechazo registrado.
+    """
+    if not is_connected(db):
+        return "no_conectado"
+    if get_setting(db, TOKEN_STATUS_KEY) == REQUIERE_RECONEXION:
+        return "requiere_reconexion"
+    return "conectado"
+
+
+def _marcar_reconexion(db: Session) -> None:
+    """Persiste el rechazo UNA vez (y avisa una sola vez en el log).
+
+    Se conserva todo lo demás: token viejo, google_links, mappings de
+    calendarios y eventos. Nada se borra; reconectar lo reactiva todo.
+    """
+    if get_setting(db, TOKEN_STATUS_KEY) != REQUIERE_RECONEXION:
+        set_setting(db, TOKEN_STATUS_KEY, REQUIERE_RECONEXION)
+        log.warning(
+            "Google rechazó el refresh token (invalid_grant). El sync queda "
+            "suspendido hasta reconectar la cuenta desde Ajustes."
+        )
+
+
 def disconnect(db: Session) -> None:
     set_setting(db, TOKEN_KEY, None)
+    set_setting(db, TOKEN_STATUS_KEY, None)
 
 
 # ---------- http ----------
@@ -146,6 +182,9 @@ def exchange_code(db: Session, code: str) -> None:
     if "refresh_token" not in data:
         raise GoogleError("Google no envió refresh_token. Revoca el acceso y reconecta.")
     _guardar_token(db, data)
+    # credenciales frescas: si veniamos de un invalid_grant, aqui se levanta
+    # la suspension y el espejo retoma solo en la siguiente vuelta
+    set_setting(db, TOKEN_STATUS_KEY, None)
 
 
 def _guardar_token(db: Session, data: dict, conservar_refresh: str | None = None) -> None:
@@ -163,17 +202,34 @@ def _access_token(db: Session) -> str:
     if not token.get("refresh_token"):
         raise GoogleError("No hay ninguna cuenta de Google conectada.")
 
+    # corte central: con el refresh token ya rechazado, ningún caminante
+    # (sync, calendario, status) vuelve a golpear a Google hasta reconectar
+    if get_setting(db, TOKEN_STATUS_KEY) == REQUIERE_RECONEXION:
+        raise GoogleError(
+            "La sesión de Google caducó. Reconéctala en Ajustes → Google.", 401
+        )
+
     vence = datetime.fromisoformat(token.get("expires_at", "1970-01-01T00:00:00+00:00"))
     if token.get("access_token") and vence - timedelta(seconds=60) > datetime.now(timezone.utc):
         return token["access_token"]
 
     client_id, secret = credentials(db)
-    data = _post_form(TOKEN_URL, {
-        "client_id": client_id,
-        "client_secret": secret,
-        "refresh_token": token["refresh_token"],
-        "grant_type": "refresh_token",
-    })
+    try:
+        data = _post_form(TOKEN_URL, {
+            "client_id": client_id,
+            "client_secret": secret,
+            "refresh_token": token["refresh_token"],
+            "grant_type": "refresh_token",
+        })
+    except GoogleError as e:
+        # invalid_grant = refresh token expirado/revocado (en Testing caduca a
+        # los 7 días). Se persiste el estado y se deja de insistir.
+        if "invalid_grant" in str(e):
+            _marcar_reconexion(db)
+            raise GoogleError(
+                "La sesión de Google caducó. Reconéctala en Ajustes → Google.", 401
+            )
+        raise
     _guardar_token(db, data, conservar_refresh=token["refresh_token"])
     return data["access_token"]
 
