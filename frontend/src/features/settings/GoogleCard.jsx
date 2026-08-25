@@ -113,6 +113,11 @@ export default function GoogleCard() {
     try {
       const r = await apiPost("/api/google/sync");
       if (r.error) throw new Error(r.error);
+      if (r.omitido) {
+        setMsg({ ok: false, text: r.omitido });
+        cargar(); // por si el estado acaba de cambiar a "requiere reconexión"
+        return;
+      }
       const partes = [];
       if (r.creados) partes.push(`${r.creados} creado${r.creados > 1 ? "s" : ""}`);
       if (r.actualizados) partes.push(`${r.actualizados} actualizado${r.actualizados > 1 ? "s" : ""}`);
@@ -134,13 +139,22 @@ export default function GoogleCard() {
 
   if (!status) return null;
 
+  // el backend manda el estado real; un token que Google ya rechazó NO es
+  // "conectado" aunque siga guardado en la base
+  const estado = status.estado || (status.connected ? "conectado" : "no_conectado");
+
   return (
     <GlassCard className="p-5">
       <div className="mb-1 flex items-center justify-between">
         <h2 className="font-semibold">📆 Google Calendar</h2>
-        {status.connected && (
+        {estado === "conectado" && (
           <span className="rounded-full bg-ok/10 px-2.5 py-1 text-xs font-medium text-ok">
             Conectado
+          </span>
+        )}
+        {estado === "requiere_reconexion" && (
+          <span className="rounded-full bg-[#f59e0b]/10 px-2.5 py-1 text-xs font-medium text-[#b45309]">
+            Requiere reconexión
           </span>
         )}
       </div>
@@ -148,7 +162,26 @@ export default function GoogleCard() {
         Ve y edita tus eventos de Google desde el calendario de HomeOS.
       </p>
 
-      {!status.connected && (
+      {estado === "requiere_reconexion" && (
+        <div className="mb-3 flex flex-col gap-3 rounded-xl border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-3">
+          <p className="text-sm">
+            Google caducó la sesión (pasa cada ~7 días mientras la app esté en
+            modo Prueba). Tus calendarios, eventos y enlaces siguen guardados:
+            solo hay que reconectar y la sincronización retoma sola, sin
+            duplicar nada.
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={conectar} disabled={busy}>
+              Reconectar Google
+            </Button>
+            <Button variant="ghost" onClick={desconectar} disabled={busy}>
+              Desconectar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {estado === "no_conectado" && (
         <>
           <button
             className="mb-3 text-xs font-medium text-accent hover:underline"
@@ -245,7 +278,7 @@ export default function GoogleCard() {
         </>
       )}
 
-      {status.connected && (
+      {estado === "conectado" && (
         <div className="flex flex-col gap-3">
           {status.calendars.length > 0 && (
             <div className="flex flex-col gap-1.5 text-sm font-medium">
