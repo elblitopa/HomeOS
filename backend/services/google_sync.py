@@ -22,6 +22,7 @@ from backend.database import SessionLocal
 from backend.models import (
     Event,
     GoogleLink,
+    Loan,
     RecurringPayment,
     ScheduledTransaction,
     Subscription,
@@ -131,6 +132,23 @@ def _deseado(db: Session) -> dict[tuple[str, int], dict]:
                 _pie(f"{etiqueta} {p.installments_paid + 1} de {p.installments_total}"
                      f" ({faltan} por delante).", "Cobro a plazos" if cobro else "Deuda"),
                 [AVISO_DIA_ANTERIOR],
+            )
+
+        # prestamos pendientes con fecha prometida: el aviso del celular es
+        # justo lo que hace falta para acordarse de cobrar
+        prestados = db.query(Loan).filter(
+            Loan.status == "prestado", Loan.promised_date.isnot(None)
+        ).all()
+        for l in prestados:
+            esperado = l.expected_amount or l.amount
+            detalle = f"Prestado el {l.lent_date.strftime('%d/%m/%Y')}." if l.lent_date else None
+            if l.extra:
+                detalle = f"{detalle} Extra: {l.extra}" if detalle else f"Extra: {l.extra}"
+            quiero[("prestamo", l.id)] = _cuerpo(
+                "prestamo", l.id,
+                f"🤝 {l.person} paga préstamo — ${esperado:,.2f} {l.currency or 'MXN'}",
+                l.promised_date, None, True,
+                _pie(detalle, "Préstamo"), [AVISO_DIA_ANTERIOR],
             )
 
         # ingresos y egresos programados que siguen sin confirmarse

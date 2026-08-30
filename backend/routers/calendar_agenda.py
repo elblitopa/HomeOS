@@ -18,6 +18,7 @@ from backend.models import (
     Event,
     ExchangeRate,
     Goal,
+    Loan,
     Note,
     PERIOD_MONTHS,
     RecurringPayment,
@@ -36,7 +37,7 @@ router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
 KINDS = [
     "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota",
-    "programado", "agenda", "transaccion",
+    "programado", "agenda", "transaccion", "prestamo",
 ]
 
 
@@ -143,10 +144,29 @@ def agenda(
                     None, {"type": "ingreso" if cobro else "egreso"})
 
     if "meta" in wanted:
+        ahorrado = goal_saved(db)
         for g in db.query(Goal).filter(
             Goal.deadline.isnot(None), Goal.deadline >= desde, Goal.deadline < hasta
         ):
+            # una meta ya alcanzada no es un pendiente del calendario: fuera,
+            # en vez de gritarle al usuario que "vencio" algo que ya logro
+            if g.target_amount and ahorrado.get(g.id, 0.0) >= g.target_amount:
+                continue
             add("meta", g.id, g.name, g.deadline, f"objetivo {_money(g.target_amount)}")
+
+    if "prestamo" in wanted:
+        # solo los pendientes con fecha prometida: los pagados ya se ven como
+        # el ingreso de su transaccion
+        q = db.query(Loan).filter(
+            Loan.status == "prestado",
+            Loan.promised_date.isnot(None),
+            Loan.promised_date >= desde,
+            Loan.promised_date < hasta,
+        )
+        for l in q:
+            esperado = l.expected_amount or l.amount
+            add("prestamo", l.id, f"Prestamo — {l.person}", l.promised_date,
+                f"+{_money(esperado, l.currency or BASE_CURRENCY)} · prometido")
 
     if "nota" in wanted:
         for n in db.query(Note).filter(Note.created_at >= desde, Note.created_at < hasta):
@@ -222,7 +242,7 @@ def agenda(
 
 # tipos que se pueden arrastrar a otro dia. Las suscripciones/pagos son fechas
 # recurrentes calculadas y las transacciones/notas son historial: no se mueven.
-MOVABLE = {"evento", "tarea", "google", "meta", "programado", "agenda"}
+MOVABLE = {"evento", "tarea", "google", "meta", "programado", "agenda", "prestamo"}
 
 
 class MovePayload(BaseModel):
@@ -281,6 +301,14 @@ def move_item(payload: MovePayload, tareas: BackgroundTasks, db: Session = Depen
         p.scheduled_for = mismo_horario(p.scheduled_for)
         db.commit()
         return {"moved": True, "date": p.scheduled_for.isoformat()}
+
+    if kind == "prestamo":
+        l = db.get(Loan, int(payload.ref_id))
+        if not l or not l.promised_date:
+            raise HTTPException(404, "Prestamo no encontrado")
+        l.promised_date = mismo_horario(l.promised_date)
+        db.commit()
+        return {"moved": True, "date": l.promised_date.isoformat()}
 
     if kind == "agenda":
         ev = db.get(BusinessEvent, int(payload.ref_id))
@@ -442,7 +470,10 @@ def _detalle_meta(db: Session, ref_id: int, cuando: datetime | None) -> dict | N
     falta = max(0.0, g.target_amount - ahorrado)
     dias = datos["days_left"]
 
-    if dias is None:
+    # una meta alcanzada YA no vence: se celebra, no se regaña
+    if datos.get("completed"):
+        estado = _badge("Completada", "ok")
+    elif dias is None:
         estado = None
     elif dias < 0:
         estado = _badge(f"Venció hace {abs(dias)} d", "err")
@@ -459,10 +490,7 @@ def _detalle_meta(db: Session, ref_id: int, cuando: datetime | None) -> dict | N
     return _sobre(
         "meta", g.id, g.name, g.deadline,
         amount=_dinero(g.target_amount),
-        badges=[
-            estado,
-            _badge("Meta alcanzada" if falta <= 0 else None, "ok"),
-        ],
+        badges=[estado],
         fields=[
             _campo("Avance", datos["progress"], "progreso",
                    hint=f"ahorrado ${ahorrado:,.2f} de ${g.target_amount:,.2f}"),
@@ -759,6 +787,50 @@ def _detalle_agenda(db: Session, ref_id: int, cuando: datetime | None) -> dict |
     )
 
 
+def _detalle_prestamo(db: Session, ref_id: int, cuando: datetime | None) -> dict | None:
+    l = db.get(Loan, ref_id)
+    if not l:
+        return None
+    datos = l.to_dict(fx.current_rate(db, l.currency))
+    esperado = l.expected_amount or l.amount
+    dias = datos["days_left"]
+
+    if l.status == "pagado":
+        estado = _badge("Pagado", "ok")
+    elif dias is None:
+        estado = None
+    elif dias < 0:
+        estado = _badge(f"Prometido hace {abs(dias)} d", "err")
+    elif dias == 0:
+        estado = _badge("Prometió pagar hoy", "err")
+    else:
+        estado = _badge(f"Faltan {dias} días", "neutral")
+
+    cuenta = db.get(Account, l.account_id) if l.account_id else None
+    return _sobre(
+        "prestamo", l.id, f"Préstamo — {l.person}", l.promised_date or l.lent_date,
+        description=l.note,
+        amount=_dinero(esperado, l.currency, "+"),
+        badges=[estado],
+        fields=[
+            _campo("Persona", l.person),
+            _campo("Teléfono", l.phone, "telefono"),
+            _campo("Prestado", l.amount, "dinero", currency=l.currency),
+            _campo("Espero recibir", esperado if esperado != l.amount else None,
+                   "dinero", currency=l.currency),
+            _campo("Intereses / extra", l.extra),
+            _campo("Salió de", cuenta.name if cuenta else None),
+            _campo("Fecha del préstamo", l.lent_date.isoformat() if l.lent_date else None,
+                   "fecha"),
+            _campo("Prometió pagar", l.promised_date.isoformat() if l.promised_date else None,
+                   "fecha"),
+            _campo("Recibido", l.received_amount, "dinero", currency=l.currency),
+            _campo("Pagado el", l.paid_at.isoformat() if l.paid_at else None, "fecha"),
+        ],
+        data=datos,
+    )
+
+
 RESOLVERS.update({
     "evento": _detalle_evento,
     "nota": _detalle_nota,
@@ -768,6 +840,7 @@ RESOLVERS.update({
     "suscripcion": _detalle_suscripcion,
     "pago": _detalle_pago,
     "agenda": _detalle_agenda,
+    "prestamo": _detalle_prestamo,
 })
 
 
