@@ -199,6 +199,80 @@ class Goal(Base):
             "banner_path": self.banner_path,
             "saved_amount": saved,
             "progress": min(1.0, saved / self.target_amount) if self.target_amount else 0,
+            # una meta alcanzada deja de ser un pendiente: la UI la muestra
+            # como Completada (jamas como "vencio hace X dias")
+            "completed": bool(self.target_amount) and saved >= self.target_amount,
+        }
+
+
+class Loan(Base):
+    """Dinero que TÚ prestaste a alguien, ligado a la cuenta de donde salió.
+
+    Distinto de RecurringPayment (deudas/cobros a plazos): aquí es un préstamo
+    puntual persona-a-persona, con fecha prometida de pago (que se ve en el
+    calendario y se espeja a Google) y teléfono para cobrar por WhatsApp.
+    Al crearlo nace el egreso real en transactions (el dinero salió de tu
+    cuenta); al marcarlo pagado nace el ingreso por lo recibido.
+    """
+
+    __tablename__ = "loans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person: Mapped[str] = mapped_column(String, nullable=False)
+    phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)  # lo prestado
+    currency: Mapped[str] = mapped_column(String, default=BASE_CURRENCY)
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    lent_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    # cuando dijo que iba a pagar (opcional; con fecha aparece en el calendario)
+    promised_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # intereses o "algo extra" pactado, en texto libre (10% mensual, una bocina…)
+    extra: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # cuanto esperas recibir en total (None = lo mismo que prestaste)
+    expected_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    status: Mapped[str] = mapped_column(String, default="prestado")  # prestado|pagado
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    received_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # las transacciones reales que este prestamo genero (egreso al prestar,
+    # ingreso al cobrar); se conservan para poder deshacer sin dejar fantasmas
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    repayment_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def to_dict(self, rate: float = 1.0) -> dict:
+        esperado = self.expected_amount if self.expected_amount else self.amount
+        days_left = None
+        if self.promised_date:
+            days_left = (self.promised_date.date() - datetime.now().date()).days
+        pendiente = self.status == "prestado"
+        return {
+            "id": self.id,
+            "person": self.person,
+            "phone": self.phone,
+            "amount": self.amount,
+            "currency": self.currency or BASE_CURRENCY,
+            "amount_mxn": round(self.amount * rate, 2),
+            "expected_amount": esperado,
+            "extra": self.extra,
+            "note": self.note,
+            "account_id": self.account_id,
+            "lent_date": self.lent_date.isoformat() if self.lent_date else None,
+            "promised_date": self.promised_date.isoformat() if self.promised_date else None,
+            "days_left": days_left,
+            "overdue": pendiente and days_left is not None and days_left < 0,
+            "status": self.status,
+            "paid_at": self.paid_at.isoformat() if self.paid_at else None,
+            "received_amount": self.received_amount,
+            "transaction_id": self.transaction_id,
         }
 
 

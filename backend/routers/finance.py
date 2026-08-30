@@ -13,6 +13,7 @@ from backend.models import (
     Category,
     ExchangeRate,
     Goal,
+    Loan,
     PERIOD_MONTHS,
     RecurringPayment,
     ScheduledTransaction,
@@ -162,6 +163,45 @@ def update_account(acc_id: int, payload: AccountPayload, db: Session = Depends(g
         setattr(acc, key, value)
     db.commit()
     return acc.to_dict()
+
+
+class AdjustPayload(BaseModel):
+    # el saldo REAL que tiene la cuenta hoy (en su propia divisa)
+    real_balance: float
+
+
+@router.post("/accounts/{acc_id}/adjust", status_code=201)
+def adjust_account(acc_id: int, payload: AdjustPayload, db: Session = Depends(get_db)):
+    """Cuadra una cuenta con la realidad sin reescribir historia.
+
+    Si unos días no se registraron movimientos, el usuario teclea el saldo
+    real y HomeOS crea UNA transacción de ajuste (ingreso o egreso) por la
+    diferencia. Así el saldo queda correcto y el historial cuenta la verdad:
+    "aquí hubo un ajuste", en vez de tocar initial_balance o inventar fechas.
+    """
+    acc = db.get(Account, acc_id)
+    if not acc:
+        raise HTTPException(404, "Cuenta no encontrada")
+    actual = _account_balances(db).get(acc_id, 0.0)
+    delta = round(payload.real_balance - actual, 2)
+    if abs(delta) < 0.005:
+        raise HTTPException(400, "El saldo ya coincide: no hay nada que ajustar.")
+    tx = Transaction(
+        description="Ajuste de saldo",
+        amount=abs(delta),
+        type="ingreso" if delta > 0 else "egreso",
+        account_id=acc_id,
+        occurred_at=datetime.now(),
+        fx_rate=fx.current_rate(db, acc.currency),
+    )
+    db.add(tx)
+    db.commit()
+    return {
+        "transaction": tx.to_dict(),
+        "old_balance": actual,
+        "new_balance": payload.real_balance,
+        "delta": delta,
+    }
 
 
 @router.delete("/accounts/{acc_id}")
@@ -362,6 +402,178 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     if not goal:
         raise HTTPException(404, "Meta no encontrada")
     db.delete(goal)
+    db.commit()
+    return {"deleted": True}
+
+
+# ---------- préstamos a personas ----------
+
+class LoanPayload(BaseModel):
+    person: str = Field(min_length=1)
+    amount: float = Field(gt=0)
+    account_id: int
+    phone: str | None = None
+    lent_date: datetime | None = None
+    promised_date: datetime | None = None
+    extra: str | None = None          # intereses o algo extra pactado
+    expected_amount: float | None = Field(default=None, gt=0)
+    note: str | None = None
+
+
+class LoanEditPayload(BaseModel):
+    """Lo editable después de creado. El monto y la cuenta NO: el egreso ya
+    quedó en el historial; para corregirlos se borra el préstamo (que se
+    lleva sus transacciones) y se captura de nuevo."""
+    person: str = Field(min_length=1)
+    phone: str | None = None
+    promised_date: datetime | None = None
+    extra: str | None = None
+    expected_amount: float | None = Field(default=None, gt=0)
+    note: str | None = None
+
+
+class LoanPayPayload(BaseModel):
+    received_amount: float | None = Field(default=None, gt=0)
+    account_id: int | None = None  # a dónde entró el pago (default: la misma)
+    note: str | None = None
+
+
+def _loan_rate(db: Session, loan: Loan) -> float:
+    return fx.current_rate(db, loan.currency)
+
+
+@router.get("/loans")
+def list_loans(status: str | None = None, db: Session = Depends(get_db)):
+    q = db.query(Loan)
+    if status:
+        q = q.filter(Loan.status == status)
+    prestamos = q.order_by(Loan.status.desc(), Loan.promised_date.is_(None),
+                           Loan.promised_date, Loan.lent_date.desc()).all()
+    return [l.to_dict(_loan_rate(db, l)) for l in prestamos]
+
+
+@router.post("/loans", status_code=201)
+def create_loan(payload: LoanPayload, db: Session = Depends(get_db)):
+    acc = db.get(Account, payload.account_id)
+    if not acc:
+        raise HTTPException(400, "La cuenta no existe")
+    cuando = payload.lent_date or datetime.now()
+    # el dinero salió de verdad: nace el egreso con el tipo de cambio congelado
+    tx = Transaction(
+        description=f"Préstamo a {payload.person.strip()}",
+        amount=payload.amount,
+        type="egreso",
+        account_id=acc.id,
+        occurred_at=cuando,
+        fx_rate=fx.current_rate(db, acc.currency),
+    )
+    db.add(tx)
+    db.flush()  # para tener tx.id sin otro commit
+    loan = Loan(
+        person=payload.person.strip(),
+        phone=(payload.phone or "").strip() or None,
+        amount=payload.amount,
+        currency=acc.currency,
+        account_id=acc.id,
+        lent_date=cuando,
+        promised_date=payload.promised_date,
+        extra=(payload.extra or "").strip() or None,
+        expected_amount=payload.expected_amount,
+        note=(payload.note or "").strip() or None,
+        transaction_id=tx.id,
+    )
+    db.add(loan)
+    db.commit()
+    return loan.to_dict(_loan_rate(db, loan))
+
+
+@router.put("/loans/{loan_id}")
+def update_loan(loan_id: int, payload: LoanEditPayload, db: Session = Depends(get_db)):
+    loan = db.get(Loan, loan_id)
+    if not loan:
+        raise HTTPException(404, "Préstamo no encontrado")
+    loan.person = payload.person.strip()
+    loan.phone = (payload.phone or "").strip() or None
+    loan.promised_date = payload.promised_date
+    loan.extra = (payload.extra or "").strip() or None
+    loan.expected_amount = payload.expected_amount
+    loan.note = (payload.note or "").strip() or None
+    if loan.transaction_id:
+        tx = db.get(Transaction, loan.transaction_id)
+        if tx:
+            tx.description = f"Préstamo a {loan.person}"
+    db.commit()
+    return loan.to_dict(_loan_rate(db, loan))
+
+
+@router.post("/loans/{loan_id}/pay")
+def pay_loan(loan_id: int, payload: LoanPayPayload | None = None,
+             db: Session = Depends(get_db)):
+    """La persona pagó: entra el ingreso (con intereses/extra si los hubo)."""
+    loan = db.get(Loan, loan_id)
+    if not loan:
+        raise HTTPException(404, "Préstamo no encontrado")
+    if loan.status == "pagado":
+        raise HTTPException(409, "Este préstamo ya está marcado como pagado")
+    datos = payload or LoanPayPayload()
+    destino_id = datos.account_id or loan.account_id
+    destino = db.get(Account, destino_id) if destino_id else None
+    if not destino:
+        raise HTTPException(400, "Elige a qué cuenta entró el pago")
+    recibido = datos.received_amount or loan.expected_amount or loan.amount
+    tx = Transaction(
+        description=f"Pago de préstamo — {loan.person}",
+        amount=recibido,
+        type="ingreso",
+        account_id=destino.id,
+        occurred_at=datetime.now(),
+        fx_rate=fx.current_rate(db, destino.currency),
+    )
+    db.add(tx)
+    db.flush()
+    loan.status = "pagado"
+    loan.paid_at = datetime.now()
+    loan.received_amount = recibido
+    loan.repayment_transaction_id = tx.id
+    if datos.note:
+        loan.note = datos.note.strip() or loan.note
+    db.commit()
+    return loan.to_dict(_loan_rate(db, loan))
+
+
+@router.post("/loans/{loan_id}/reopen")
+def reopen_loan(loan_id: int, db: Session = Depends(get_db)):
+    """Se marcó pagado por error: se borra el ingreso y vuelve a prestado."""
+    loan = db.get(Loan, loan_id)
+    if not loan:
+        raise HTTPException(404, "Préstamo no encontrado")
+    if loan.status != "pagado":
+        raise HTTPException(409, "Este préstamo no está pagado")
+    if loan.repayment_transaction_id:
+        tx = db.get(Transaction, loan.repayment_transaction_id)
+        if tx:
+            db.delete(tx)
+    loan.status = "prestado"
+    loan.paid_at = None
+    loan.received_amount = None
+    loan.repayment_transaction_id = None
+    db.commit()
+    return loan.to_dict(_loan_rate(db, loan))
+
+
+@router.delete("/loans/{loan_id}")
+def delete_loan(loan_id: int, db: Session = Depends(get_db)):
+    """Borra el préstamo Y sus transacciones ligadas: deshacer un registro
+    erróneo no debe dejar un egreso fantasma descuadrando la cuenta."""
+    loan = db.get(Loan, loan_id)
+    if not loan:
+        raise HTTPException(404, "Préstamo no encontrado")
+    for tx_id in (loan.transaction_id, loan.repayment_transaction_id):
+        if tx_id:
+            tx = db.get(Transaction, tx_id)
+            if tx:
+                db.delete(tx)
+    db.delete(loan)
     db.commit()
     return {"deleted": True}
 
