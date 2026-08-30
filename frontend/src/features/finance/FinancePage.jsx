@@ -5,6 +5,7 @@ import useContexts from "../../hooks/useContexts.js";
 import ResumenTab from "./ResumenTab.jsx";
 import TransactionsTab from "./TransactionsTab.jsx";
 import ScheduledTab from "./ScheduledTab.jsx";
+import PrestamosTab from "./PrestamosTab.jsx";
 import CategoriesTab from "./CategoriesTab.jsx";
 import MonthlyTab from "./MonthlyTab.jsx";
 import BudgetTab from "./BudgetTab.jsx";
@@ -16,6 +17,7 @@ const TABS = [
   { key: "resumen", label: "Resumen" },
   { key: "transacciones", label: "Transacciones" },
   { key: "programados", label: "Programados" },
+  { key: "prestamos", label: "Préstamos" },
   { key: "categorias", label: "Categorías" },
   { key: "mensual", label: "Mensual" },
   { key: "presupuesto", label: "Presupuesto" },
@@ -79,6 +81,7 @@ export default function FinancePage() {
       {tab === "resumen" && <ResumenTab {...shared} />}
       {tab === "transacciones" && <TransactionsTab {...shared} />}
       {tab === "programados" && <ScheduledTab {...shared} />}
+      {tab === "prestamos" && <PrestamosTab {...shared} />}
       {tab === "categorias" && <CategoriesTab {...shared} />}
       {tab === "mensual" && <MonthlyTab {...shared} />}
       {tab === "presupuesto" && <BudgetTab {...shared} />}

@@ -1436,3 +1436,295 @@ export function AplazarModal({ open, item, onClose, onSaved }) {
     </Modal>
   );
 }
+
+
+/** Cuadrar una cuenta con la realidad: tecleas el saldo real y HomeOS crea
+ *  UNA transacción de ajuste por la diferencia. El historial cuenta la
+ *  verdad ("hubo un ajuste") en vez de reescribir movimientos viejos. */
+export function AjusteModal({ open, accounts, onClose, onSaved }) {
+  const { form, set, error, setError, saving, setSaving } = useForm(open, {
+    account_id: accounts.find((a) => a.is_default)?.id || accounts[0]?.id || "",
+    real_balance: "",
+  });
+
+  const cuenta = accounts.find((a) => a.id === Number(form.account_id));
+  const delta =
+    cuenta && form.real_balance !== "" && !Number.isNaN(Number(form.real_balance))
+      ? Number(form.real_balance) - (cuenta.balance ?? 0)
+      : null;
+
+  const save = async () => {
+    if (!cuenta || form.real_balance === "") return setError("Elige cuenta y saldo real.");
+    setSaving(true);
+    try {
+      await apiPost(`/api/finance/accounts/${cuenta.id}/adjust`, {
+        real_balance: Number(form.real_balance),
+      });
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Actualizar saldo">
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-ink-soft">
+          Para cuando unos días no se registraron movimientos: teclea cuánto
+          hay HOY en la cuenta y se crea un ajuste por la diferencia.
+        </p>
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Cuenta
+          <select className={selectCls} value={form.account_id} onChange={set("account_id")}>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} — {fmtMoney(a.balance ?? 0, a.currency)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Saldo real actual {cuenta ? `(${cuenta.currency})` : ""}
+          <input
+            type="number" inputMode="decimal" step="0.01" className={inputCls}
+            value={form.real_balance} onChange={set("real_balance")} autoFocus
+            placeholder={cuenta ? String(cuenta.balance ?? 0) : ""}
+          />
+        </label>
+        {delta !== null && Math.abs(delta) >= 0.005 && (
+          <p className={`text-sm font-medium ${delta > 0 ? "text-ok" : "text-err"}`}>
+            Se registrará un {delta > 0 ? "ingreso" : "egreso"} de ajuste por{" "}
+            {fmtMoney(Math.abs(delta), cuenta.currency)}.
+          </p>
+        )}
+        {delta !== null && Math.abs(delta) < 0.005 && (
+          <p className="text-sm text-ink-soft">El saldo ya coincide: nada que ajustar.</p>
+        )}
+        {error && <p className="text-sm text-err">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || delta === null || Math.abs(delta) < 0.005}>
+            {saving ? "Guardando…" : "Ajustar"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+
+/** Alta/edición de un préstamo a una persona. Al crearlo, el egreso sale de
+ *  la cuenta elegida de verdad; monto y cuenta quedan fijos después (para
+ *  corregirlos: borrar el préstamo, que se lleva sus transacciones). */
+export function LoanModal({ open, loan, accounts, onClose, onSaved }) {
+  const { form, set, error, setError, saving, setSaving } = useForm(open, {
+    person: loan?.person || "",
+    phone: loan?.phone || "",
+    amount: loan?.amount ?? "",
+    account_id: loan?.account_id || accounts.find((a) => a.is_default)?.id || accounts[0]?.id || "",
+    lent_date: loan?.lent_date ? loan.lent_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    promised_date: loan?.promised_date ? loan.promised_date.slice(0, 10) : "",
+    extra: loan?.extra || "",
+    expected_amount: loan?.expected_amount ?? "",
+    note: loan?.note || "",
+  });
+
+  const editando = Boolean(loan);
+  const cuenta = accounts.find((a) => a.id === Number(form.account_id));
+
+  const save = async () => {
+    if (!form.person.trim()) return setError("¿A quién le prestaste?");
+    if (!editando && (!form.amount || Number(form.amount) <= 0)) {
+      return setError("¿Cuánto prestaste?");
+    }
+    setSaving(true);
+    try {
+      const comun = {
+        person: form.person.trim(),
+        phone: form.phone.trim() || null,
+        promised_date: form.promised_date ? `${form.promised_date}T12:00` : null,
+        extra: form.extra.trim() || null,
+        expected_amount: form.expected_amount ? Number(form.expected_amount) : null,
+        note: form.note.trim() || null,
+      };
+      if (editando) {
+        await apiPut(`/api/finance/loans/${loan.id}`, comun);
+      } else {
+        await apiPost("/api/finance/loans", {
+          ...comun,
+          amount: Number(form.amount),
+          account_id: Number(form.account_id),
+          lent_date: form.lent_date ? `${form.lent_date}T12:00` : null,
+        });
+      }
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm(`¿Borrar el préstamo a ${loan.person}?\n\nTambién se borran sus ` +
+                 "transacciones ligadas (el egreso y, si existía, el pago) para " +
+                 "que la cuenta no quede descuadrada.")) return;
+    await apiDelete(`/api/finance/loans/${loan.id}`);
+    onSaved();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={editando ? "Editar préstamo" : "Nuevo préstamo"}>
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            ¿A quién?
+            <input className={inputCls} value={form.person} onChange={set("person")}
+                   placeholder="Nombre" autoFocus />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Teléfono (para WhatsApp)
+            <input className={inputCls} inputMode="tel" value={form.phone}
+                   onChange={set("phone")} placeholder="8112345678" />
+          </label>
+        </div>
+
+        {!editando && (
+          <div className="grid grid-cols-2 gap-4">
+            <label className="flex flex-col gap-1 text-sm font-medium">
+              Monto prestado {cuenta ? `(${cuenta.currency})` : ""}
+              <input type="number" inputMode="decimal" step="0.01" min="0"
+                     className={inputCls} value={form.amount} onChange={set("amount")} />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-medium">
+              De qué cuenta salió
+              <select className={selectCls} value={form.account_id} onChange={set("account_id")}>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} — {fmtMoney(a.balance ?? 0, a.currency)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+        {editando && (
+          <p className="rounded-xl bg-ink/5 px-3 py-2 text-xs text-ink-soft">
+            Prestaste {fmtMoney(loan.amount, loan.currency)} — el monto y la cuenta
+            no se editan porque su egreso ya está en el historial.
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          {!editando && (
+            <label className="flex flex-col gap-1 text-sm font-medium">
+              ¿Cuándo prestaste?
+              <input type="date" className={inputCls} value={form.lent_date}
+                     onChange={set("lent_date")} />
+            </label>
+          )}
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            ¿Cuándo dijo que paga?
+            <input type="date" className={inputCls} value={form.promised_date}
+                   onChange={set("promised_date")} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Espero recibir (opcional)
+            <input type="number" inputMode="decimal" step="0.01" min="0"
+                   className={inputCls} value={form.expected_amount}
+                   onChange={set("expected_amount")}
+                   placeholder={form.amount ? String(form.amount) : "con intereses"} />
+          </label>
+        </div>
+        <p className="-mt-2 text-[11px] text-ink-soft">
+          Con fecha prometida, el préstamo aparece en el calendario y (si el espejo
+          está activo) en Google Calendar con aviso un día antes.
+        </p>
+
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Intereses o algo extra (opcional)
+          <input className={inputCls} value={form.extra} onChange={set("extra")}
+                 placeholder="10% mensual, me regala una bocina…" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Nota (opcional)
+          <input className={inputCls} value={form.note} onChange={set("note")} />
+        </label>
+
+        {error && <p className="text-sm text-err">{error}</p>}
+        <div className="flex justify-between gap-2">
+          {editando ? (
+            <Button variant="danger" onClick={remove}>Borrar</Button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button onClick={save} disabled={saving}>
+              {saving ? "Guardando…" : editando ? "Guardar" : "Registrar préstamo"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+
+/** Marcar un préstamo como pagado: entra el ingreso por lo recibido. */
+export function LoanPayModal({ open, loan, accounts, onClose, onSaved }) {
+  const { form, set, error, setError, saving, setSaving } = useForm(open, {
+    received_amount: loan ? String(loan.expected_amount ?? loan.amount) : "",
+    account_id: loan?.account_id || accounts[0]?.id || "",
+  });
+  if (!loan) return null;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiPost(`/api/finance/loans/${loan.id}/pay`, {
+        received_amount: form.received_amount ? Number(form.received_amount) : null,
+        account_id: Number(form.account_id) || null,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`${loan.person} pagó`}>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-ink-soft">
+          Prestaste {fmtMoney(loan.amount, loan.currency)}
+          {loan.extra ? ` · extra pactado: ${loan.extra}` : ""}.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            ¿Cuánto recibiste?
+            <input type="number" inputMode="decimal" step="0.01" min="0"
+                   className={inputCls} value={form.received_amount}
+                   onChange={set("received_amount")} autoFocus />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            ¿A qué cuenta entró?
+            <select className={selectCls} value={form.account_id} onChange={set("account_id")}>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {error && <p className="text-sm text-err">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? "Guardando…" : "✓ Registrar pago"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
