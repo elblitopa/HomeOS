@@ -5,7 +5,6 @@ import Button from "../../components/ui/Button.jsx";
 import Carousel from "../../components/ui/Carousel.jsx";
 import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import Modal from "../../components/ui/Modal.jsx";
 import { COLOR_TIPO, IconoTipo } from "../../components/ui/TipoBadge.jsx";
 import { BASE_CURRENCY, fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
 import {
@@ -42,74 +41,7 @@ function ProgressBar({ value, color = "#2383e2" }) {
   );
 }
 
-/** Todas las metas en un solo lugar: primero las que faltan por alcanzar,
- *  después las completadas — que se celebran, no se marcan como vencidas. */
-function MetasTodasModal({ open, goals, onClose, onEditar }) {
-  const pendientes = goals.filter((g) => !g.completed);
-  const completadas = goals.filter((g) => g.completed);
-
-  const fila = (g) => (
-    <button
-      key={g.id}
-      className="w-full rounded-xl border border-glass-border bg-surface/50 p-3 text-left transition hover:border-accent/40"
-      onClick={() => onEditar(g)}
-    >
-      <div className="mb-1 flex items-baseline justify-between gap-2">
-        <p className="truncate text-sm font-medium">{g.name}</p>
-        {g.completed ? (
-          <span className="shrink-0 rounded-full bg-ok/10 px-2 py-0.5 text-xs font-medium text-ok">
-            Completada
-          </span>
-        ) : g.deadline ? (
-          <span
-            className={`shrink-0 text-xs ${
-              g.days_left < 0 ? "font-medium text-err" : "text-ink-soft"
-            }`}
-          >
-            {g.days_left < 0
-              ? `venció hace ${Math.abs(g.days_left)} d`
-              : g.days_left === 0
-                ? "vence hoy"
-                : `faltan ${g.days_left} d`}
-          </span>
-        ) : null}
-      </div>
-      <ProgressBar value={g.progress} color={g.completed ? "#2f9e44" : "#2383e2"} />
-      <p className="mt-1 text-xs text-ink-soft">
-        {fmtMoney(g.saved_amount)} de {fmtMoney(g.target_amount)} ({Math.round(g.progress * 100)}%)
-      </p>
-    </button>
-  );
-
-  return (
-    <Modal open={open} onClose={onClose} title="🎯 Todas las metas">
-      <div className="flex flex-col gap-4">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
-            Por alcanzar ({pendientes.length})
-          </p>
-          {pendientes.length === 0 ? (
-            <p className="text-sm text-ink-soft">Nada pendiente 🎉</p>
-          ) : (
-            <div className="flex flex-col gap-2">{pendientes.map(fila)}</div>
-          )}
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
-            Completadas ({completadas.length})
-          </p>
-          {completadas.length === 0 ? (
-            <p className="text-sm text-ink-soft">Todavía ninguna — ya caerá la primera.</p>
-          ) : (
-            <div className="flex flex-col gap-2">{completadas.map(fila)}</div>
-          )}
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-export default function ResumenTab({ accounts, categories, contexts, reload, version }) {
+export default function ResumenTab({ accounts, categories, contexts, reload, version, goTab }) {
   const [goals, setGoals] = useState([]);
   const [recurring, setRecurring] = useState([]);
   const [subs, setSubs] = useState([]);
@@ -399,9 +331,9 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
               {goals.length > 0 && (
                 <button
                   className="text-xs font-medium text-ink-soft transition hover:text-accent"
-                  onClick={() => setModal({ type: "metas-todas" })}
+                  onClick={() => goTab?.("metas")}
                 >
-                  Ver todas ({goals.length})
+                  Ver todas ({goals.length}) →
                 </button>
               )}
               <button className="text-sm text-accent" onClick={() => setModal({ type: "goal" })}>
@@ -612,12 +544,6 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
       <GoalModal open={modal?.type === "goal"} goal={modal?.data} onClose={close} onSaved={saved} />
       <AjusteModal open={modal?.type === "ajuste"} accounts={accounts} onClose={close} onSaved={saved} />
       <LoanModal open={modal?.type === "loan"} accounts={accounts} onClose={close} onSaved={saved} />
-      <MetasTodasModal
-        open={modal?.type === "metas-todas"}
-        goals={goals}
-        onClose={close}
-        onEditar={(g) => setModal({ type: "goal", data: g })}
-      />
       <RecurringModal
         open={modal?.type === "recurring"}
         item={modal?.data}

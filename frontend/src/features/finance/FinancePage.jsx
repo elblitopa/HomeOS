@@ -5,6 +5,7 @@ import useContexts from "../../hooks/useContexts.js";
 import ResumenTab from "./ResumenTab.jsx";
 import TransactionsTab from "./TransactionsTab.jsx";
 import ScheduledTab from "./ScheduledTab.jsx";
+import MetasTab from "./MetasTab.jsx";
 import PrestamosTab from "./PrestamosTab.jsx";
 import CategoriesTab from "./CategoriesTab.jsx";
 import MonthlyTab from "./MonthlyTab.jsx";
@@ -17,6 +18,7 @@ const TABS = [
   { key: "resumen", label: "Resumen" },
   { key: "transacciones", label: "Transacciones" },
   { key: "programados", label: "Programados" },
+  { key: "metas", label: "Metas" },
   { key: "prestamos", label: "Préstamos" },
   { key: "categorias", label: "Categorías" },
   { key: "mensual", label: "Mensual" },
@@ -42,7 +44,8 @@ export default function FinancePage() {
     apiGet("/api/finance/categories").then(setCategories).catch(() => {});
   }, [version]);
 
-  const shared = { accounts, categories, contexts, contextsById: byId, reload, version };
+  // goTab: para que un tab pueda saltar a otro (ej. "Ver todas" de Metas)
+  const shared = { accounts, categories, contexts, contextsById: byId, reload, version, goTab: setTab };
 
   return (
     <div className="p-4 md:p-8">
@@ -81,6 +84,7 @@ export default function FinancePage() {
       {tab === "resumen" && <ResumenTab {...shared} />}
       {tab === "transacciones" && <TransactionsTab {...shared} />}
       {tab === "programados" && <ScheduledTab {...shared} />}
+      {tab === "metas" && <MetasTab {...shared} />}
       {tab === "prestamos" && <PrestamosTab {...shared} />}
       {tab === "categorias" && <CategoriesTab {...shared} />}
       {tab === "mensual" && <MonthlyTab {...shared} />}
