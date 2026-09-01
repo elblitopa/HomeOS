@@ -30,7 +30,10 @@ const VISTAS = [
   { key: "calendario", label: "Calendario" },
 ];
 
-function ProjectFormModal({ open, item, contextId, onClose, onSaved }) {
+/** Exportado para la vista agregada de /negocios: es el MISMO editor. Con la
+ *  prop `negocios` muestra además un select para mover la actividad de un
+ *  negocio a otro (mismo registro, solo cambia su context_id). */
+export function ProjectFormModal({ open, item, contextId, negocios = [], onClose, onSaved }) {
   const [form, setForm] = useState({});
   const [error, setError] = useState(null);
 
@@ -44,17 +47,18 @@ function ProjectFormModal({ open, item, contextId, onClose, onSaved }) {
         due: item?.due_date ? toInputLocal(new Date(item.due_date)) : "",
         strategy: item?.strategy || "",
         clients: item?.clients || "",
+        context_id: item?.context_id || contextId || negocios[0]?.id || "",
       });
       setError(null);
     }
-  }, [open, item]);
+  }, [open, item, contextId, negocios]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const save = async () => {
     if (!form.title.trim()) return;
     const payload = {
-      context_id: contextId,
+      context_id: Number(form.context_id) || contextId,
       title: form.title.trim(),
       priority: form.priority,
       progress: form.progress,
@@ -95,6 +99,19 @@ function ProjectFormModal({ open, item, contextId, onClose, onSaved }) {
             onKeyDown={(e) => e.key === "Enter" && save()}
           />
         </label>
+
+        {negocios.length > 0 && (
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Negocio
+            <select className={inputCls} value={form.context_id || ""} onChange={set("context_id")}>
+              {negocios.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5 text-sm font-medium">

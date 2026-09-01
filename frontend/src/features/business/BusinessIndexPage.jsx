@@ -7,6 +7,7 @@ import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import useCardSort from "../../hooks/useCardSort.js";
 import useContexts from "../../hooks/useContexts.js";
+import BusinessActivities from "./BusinessActivities.jsx";
 import BusinessFormModal from "./BusinessFormModal.jsx";
 
 /** Portada de Negocios: una tarjeta por negocio, con su banner.
@@ -89,6 +90,9 @@ export default function BusinessIndexPage() {
           ))}
         </div>
       )}
+
+      {/* las mismas actividades de cada negocio, agregadas y filtrables */}
+      {negocios.length > 0 && <BusinessActivities negocios={negocios} />}
 
       <BusinessFormModal
         open={!!modal}
