@@ -13,8 +13,26 @@ Carpeta: `C:\Users\pablo\OneDrive\Documents\Proyectos\HomeOS`
 
 Todo comiteado por temas; `frontend/dist/` viaja en su propio commit al final
 de cada tanda porque es un solo bundle que no se puede repartir. Última tanda:
-la Agenda de eventos de Negocios (vista de tarjetas del detalle, sección
-Agenda con 3 vistas, MonthGrid compartido, kind "agenda" en el calendario).
+Consumibles (pestaña en Finanzas + tracking en el modal de transacción).
+
+- **Cada tanda TERMINA fusionada a `main` y pusheada a origin.** El flujo es:
+  rama → commits → `git checkout main` → `git merge --ff-only <rama>` →
+  `git push origin main`. Nunca dejar el trabajo solo en la rama: la app se
+  sirve desde esta carpeta según la rama palomeada, y las sesiones nuevas (y
+  cualquier cosa que lea GitHub) parten de `main` — trabajo sin fusionar
+  "desaparece" para ellas. Así se perdieron de vista los cambios de Finanzas
+  el 30 de agosto (quedaron 6 commits varados en
+  `feat/finanzas-ajuste-metas-prestamos`; ya se fusionaron).
+- **Antes de empezar una tanda nueva**: confirmar que estás parado en `main`
+  y que `git branch --no-merged main` no muestra trabajo pendiente de fusionar.
+- **Después del push, desplegar en la nube** (la VM no se actualiza sola):
+  `ssh pablo_alanis0@homeos-cloud` → `cd /opt/homeos/app && git pull &&
+  docker compose build && docker compose up -d` (backup antes:
+  `sudo /opt/homeos/app/scripts/backup-homeos.sh`). Detalle en DEPLOYMENT.md
+  PARTE 14. Ojo: el Docker compila su propio bundle desde `src/`, así que el
+  hash del JS en la nube no coincide con el de `frontend/dist/` — para
+  verificar la versión hay que buscar textos de la UI nueva en el bundle, no
+  comparar hashes.
 
 ---
 
@@ -26,7 +44,7 @@ Agenda con 3 vistas, MonthGrid compartido, kind "agenda" en el calendario).
 | Apps (`/apps`) | Lanza los 5 proyectos, start/stop del .bat, estado por puerto |
 | Calendario | Vista Mes y Día. Junta eventos, Google, tareas, suscripciones, pagos, metas, notas, programados y transacciones. Click en cualquier bloque abre su detalle |
 | Tareas | Prioridades, contextos, fecha límite, timeline de notas y archivos |
-| Finanzas | Resumen, Transacciones, **Programados**, Categorías, Mensual, Presupuesto, y Divisas aparte |
+| Finanzas | Resumen, Transacciones, **Consumibles**, **Programados**, Metas, Préstamos, Categorías, Mensual, Presupuesto, y Divisas aparte |
 | **Negocios** (`/negocios`) | Tarjetas con banner, una por negocio → detalle (en tabs o tarjetas con banner por sección) con Proyectos (Tabla/Tablero/Calendario), **Agenda** (eventos de clientes, opcional por negocio), Proveedores, Pagos, CRM, Contenido, Competidores, Mensajes, Documentos y Manual |
 | Rutinas | Checklist por día (se puede palomear cualquier fecha pasada), matriz semanal clicable, gráfica de 30 días |
 | Notas / Archivos / Ajustes | Texto y voz · biblioteca con previews · Google, semana, Discord, contextos, nombre y frases |
@@ -105,6 +123,37 @@ Agenda con 3 vistas, MonthGrid compartido, kind "agenda" en el calendario).
   borrar. Movibles con drag conservando duración. La grilla mensual chica es
   `components/ui/MonthGrid.jsx`, compartida por Proyectos y Agenda (la de
   CalendarPage sigue aparte a propósito: es monolítica).
+- **Consumibles = tracking estadístico sobre egresos reales, sin segunda
+  copia.** La tabla `consumables` solo guarda identidad (`id`, `name`,
+  `active`, `created_at`); qué compras le pertenecen lo dice
+  `transactions.consumable_id` (FK `ON DELETE SET NULL`, agregada en
+  `MIGRATIONS`). NADA calculado se persiste: `GET /api/finance/consumables`
+  deriva todo de la historia real — compras = egresos con ese
+  `consumable_id` ordenados por `occurred_at`; frecuencia = promedio
+  aritmético de los días entre compras consecutivas (redondeado a días
+  enteros, calculado sobre `.date()` para que la hora no meta fracciones);
+  próxima estimada = última compra + promedio. Con menos de 2 compras no hay
+  promedio ni próxima ("Esperando la segunda compra"). Editar la fecha o
+  borrar una compra recalcula solo, y borrar la última compra NO borra el
+  consumible.
+  - **Alta atómica**: la primera compra se registra con
+    `new_consumable_name` en el payload de `POST/PUT /transactions` — NO es
+    columna del modelo; el router lo resuelve a `consumable_id` con `flush()`
+    en la misma sesión (un solo commit, sin huérfanos). La recompra manda
+    `consumable_id`. Ambos a la vez es 400; en ingresos, transferencias o
+    programados también es 400 (los programados ni traen esos campos: un
+    plan no es una compra). El modal limpia la selección al cambiar de tipo.
+  - **Duplicados**: mismo nombre ignorando mayúsculas/espacios reutiliza el
+    artículo existente (y lo revive si estaba archivado) en vez de duplicar;
+    renombrar hacia un nombre ocupado da 409.
+  - **Archivar** (`PUT /consumables/{id}` con `active=false`) solo lo saca
+    del selector de recompras y de la lista por defecto
+    (`?include_archived=true` lo trae); jamás toca transacciones. No hay
+    DELETE a propósito: la historia financiera no se borra desde aquí.
+  - No confundir con Programados: programado = sé que habrá un movimiento
+    futuro; consumible = HomeOS observa cuándo compro y estima cuándo
+    volveré a necesitarlo. La predicción es estadística, no crea
+    transacciones futuras ni alertas duras.
 - **PayPal no tiene API útil.** La suya (`/v2/pricing/quote-exchange-rates`) es
   para comercios elegibles con OAuth. Y no hace falta: PayPal usa el tipo de
   cambio del mercado con su margen adentro. Medido con dos cargos reales de
