@@ -74,12 +74,15 @@ export default function InicioPage() {
           />
         )}
 
+        {/* el saludo es encabezado de TODA la página, fuera del grid: así la
+            primera tarjeta del sidebar arranca a la altura de la frase del
+            día, no del saludo */}
+        <Saludo ahora={ahora} nombre={nombre} />
+
         {/* dos columnas en desktop: lo de siempre + la bandeja de atención.
             En móvil/iPad angosto se apilan en una sola columna */}
         <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_330px] lg:items-start lg:gap-6">
           <div className="flex min-w-0 flex-col gap-5">
-            <Saludo ahora={ahora} nombre={nombre} />
-
             <FraseDelDia frase={frase} fijadas={fijadas} onFijadasChange={setFijadas} />
 
             <InboxStack
