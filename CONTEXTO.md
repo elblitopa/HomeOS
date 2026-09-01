@@ -13,7 +13,8 @@ Carpeta: `C:\Users\pablo\OneDrive\Documents\Proyectos\HomeOS`
 
 Todo comiteado por temas; `frontend/dist/` viaja en su propio commit al final
 de cada tanda porque es un solo bundle que no se puede repartir. Última tanda:
-Consumibles (pestaña en Finanzas + tracking en el modal de transacción).
+dashboard de atención (banner de Inicio, bandeja Necesita tu atención +
+Suscripciones, y Actividades agregadas en /negocios).
 
 - **Cada tanda TERMINA fusionada a `main` y pusheada a origin.** El flujo es:
   rama → commits → `git checkout main` → `git merge --ff-only <rama>` →
@@ -40,12 +41,12 @@ Consumibles (pestaña en Finanzas + tracking en el modal de transacción).
 
 | Sección | Qué tiene |
 |---|---|
-| **Inicio** (`/`) | Saludo por hora + nombre, frase del día con pin, e inbox con pestañas Hoy / Semana. Es la portada |
+| **Inicio** (`/`) | Banner opcional tipo cover, saludo por hora + nombre, frase del día con pin, inbox Hoy / Semana, y columna derecha (desktop) con **Necesita tu atención** y **Suscripciones próximas**. Es la portada |
 | Apps (`/apps`) | Lanza los 5 proyectos, start/stop del .bat, estado por puerto |
 | Calendario | Vista Mes y Día. Junta eventos, Google, tareas, suscripciones, pagos, metas, notas, programados y transacciones. Click en cualquier bloque abre su detalle |
 | Tareas | Prioridades, contextos, fecha límite, timeline de notas y archivos |
 | Finanzas | Resumen, Transacciones, **Consumibles**, **Programados**, Metas, Préstamos, Categorías, Mensual, Presupuesto, y Divisas aparte |
-| **Negocios** (`/negocios`) | Tarjetas con banner, una por negocio → detalle (en tabs o tarjetas con banner por sección) con Proyectos (Tabla/Tablero/Calendario), **Agenda** (eventos de clientes, opcional por negocio), Proveedores, Pagos, CRM, Contenido, Competidores, Mensajes, Documentos y Manual |
+| **Negocios** (`/negocios`) | Tarjetas con banner, una por negocio, + **Actividades pendientes** (vista agregada de los proyectos de TODOS los negocios: Lista/Calendario y filtro por negocio) → detalle (en tabs o tarjetas con banner por sección) con Proyectos (Tabla/Tablero/Calendario), **Agenda** (eventos de clientes, opcional por negocio), Proveedores, Pagos, CRM, Contenido, Competidores, Mensajes, Documentos y Manual |
 | Rutinas | Checklist por día (se puede palomear cualquier fecha pasada), matriz semanal clicable, gráfica de 30 días |
 | Notas / Archivos / Ajustes | Texto y voz · biblioteca con previews · Google, semana, Discord, contextos, nombre y frases |
 
@@ -123,6 +124,40 @@ Consumibles (pestaña en Finanzas + tracking en el modal de transacción).
   borrar. Movibles con drag conservando duración. La grilla mensual chica es
   `components/ui/MonthGrid.jsx`, compartida por Proyectos y Agenda (la de
   CalendarPage sigue aparte a propósito: es monolítica).
+- **El dashboard agrega, nunca duplica (una entidad → muchas vistas).** La
+  bandeja **Necesita tu atención** de Inicio y las **Actividades pendientes**
+  de /negocios son vistas de registros que ya existían: tareas (`todos`, con
+  su prioridad 1-4 y su relación a negocio vía `context_id`) y actividades de
+  negocio (`business_projects`, P1-P3 + progreso + fecha). No hay tabla nueva
+  ni columna nueva: completar/editar desde cualquier vista actualiza el
+  registro original y las demás vistas se recalculan solas.
+  - **Ranking de atención** (`rankAtencion` en
+    `features/inicio/AtencionSidebar.jsx`): buckets temporales deterministas
+    — vencidos (más viejo primero) → vence hoy → 1-3 días → prioridad alta
+    restante (con fecha primero, sin fecha al final) → 4-7 días — y la
+    prioridad SOLO desempata dentro de cada bucket (P2 vencida gana a P1 en
+    20 días). Nada se persiste: se calcula de fecha+prioridad+estado al
+    pintar. Tope ~6 en la portada, "Ver todas" → /tareas. Días en calendario
+    local (`soloDia`), nunca `toISOString()`.
+  - **Suscripciones próximas en Inicio** reusa `urgencia()` exportada de
+    `ResumenTab` (≤0 rojo, ≤7 ámbar) y el mismo texto de días que Finanzas:
+    una sola definición de urgencia. Suscripciones NO entran a la bandeja de
+    atención (no son accionables como tarea, evita duplicados visuales).
+  - **Actividades de /negocios** = `GET /api/business/projects` sin
+    `context_id` (ahora opcional). Lista (tabla en desktop, cards en móvil,
+    terminadas fuera) + Calendario (el `MonthGrid` compartido, chips del
+    color del negocio) + filtro por negocio. Edita con el MISMO
+    `ProjectFormModal` (ahora exportado; con la prop `negocios` deja mover
+    la actividad de negocio con un select — mismo id, solo cambia
+    `context_id`).
+  - **Banner de Inicio**: clave `home_banner_path` en la tabla `settings`
+    (kv, sin migración), imagen por `/api/uploads/banner` como los banners
+    de negocios; se gestiona en Ajustes → "Portada de Inicio". En Inicio se
+    pinta el ORIGINAL (no la miniatura, que topa en 640px); sin banner no se
+    reserva espacio. Los banners de negocio ya existían (modal de editar
+    negocio + `contexts.banner_path`).
+  - Los datos de Inicio viven en `useInbox` (un fetch por fuente, sin
+    duplicar el de tareas); Inicio pasa los crudos a `AtencionSidebar`.
 - **Consumibles = tracking estadístico sobre egresos reales, sin segunda
   copia.** La tabla `consumables` solo guarda identidad (`id`, `name`,
   `active`, `created_at`); qué compras le pertenecen lo dice
