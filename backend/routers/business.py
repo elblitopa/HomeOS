@@ -301,8 +301,13 @@ def _validar_proyecto(payload: ProjectPayload) -> None:
 
 
 @router.get("/projects")
-def list_projects(context_id: int, db: Session = Depends(get_db)):
-    q = db.query(BusinessProject).filter(BusinessProject.context_id == context_id)
+def list_projects(context_id: int | None = None, db: Session = Depends(get_db)):
+    """Sin context_id devuelve los proyectos de TODOS los negocios: es lo que
+    usa la vista agregada de /negocios (y la bandeja de atención de Inicio).
+    Son los mismos registros, nunca copias."""
+    q = db.query(BusinessProject)
+    if context_id is not None:
+        q = q.filter(BusinessProject.context_id == context_id)
     items = q.order_by(BusinessProject.sort_order, BusinessProject.created_at).all()
     return [p.to_dict() for p in items]
 

@@ -26,6 +26,9 @@ SYNC_FINANCE_KEY = "google_sync_finance"
 USER_NAME_KEY = "user_name"
 QUOTES_KEY = "quotes_custom"     # las que escribio el usuario
 PINNED_KEY = "quotes_pinned"     # las que marco con el pin, guardadas por texto
+# banner de Inicio: un path del sistema de uploads (mismo flujo que los
+# banners de negocios/cuentas/metas), nunca la imagen en la base
+HOME_BANNER_KEY = "home_banner_path"
 MAX_NOMBRE = 40
 MAX_FRASES = 100
 MAX_LARGO_FRASE = 240
@@ -61,6 +64,7 @@ class SettingsPayload(BaseModel):
     user_name: str | None = None
     quotes_custom: list[str] | None = None
     quotes_pinned: list[str] | None = None
+    home_banner_path: str | None = None
 
 
 def _colors(db: Session) -> dict:
@@ -127,6 +131,7 @@ def read_settings(db: Session = Depends(get_db)):
         "user_name": get_setting(db, USER_NAME_KEY) or "",
         "quotes_custom": _frases(db, QUOTES_KEY),
         "quotes_pinned": _frases(db, PINNED_KEY),
+        "home_banner_path": get_setting(db, HOME_BANNER_KEY),
     }
 
 
@@ -168,6 +173,14 @@ def write_settings(payload: SettingsPayload, db: Session = Depends(get_db)):
                        ("google_sync_finance", SYNC_FINANCE_KEY)):
         if campo in data:
             set_setting(db, key, "1" if data[campo] else "0")
+
+    if "home_banner_path" in data:
+        # None o vacio = quitar el banner; el archivo queda en uploads como
+        # cualquier otro (mismo criterio que los banners de negocios)
+        path = (data["home_banner_path"] or "").strip() or None
+        if path and ".." in path:
+            raise HTTPException(400, "Ruta de banner inválida")
+        set_setting(db, HOME_BANNER_KEY, path)
 
     if "user_name" in data:
         nombre = (data["user_name"] or "").strip()
