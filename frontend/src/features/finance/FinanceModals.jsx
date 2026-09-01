@@ -399,10 +399,28 @@ export function TransactionModal({
   const isTransfer = form.type === "transferencia";
   const esProgramado = form.programado;
   const [paypal, setPaypal] = useState({ activo: false, total: "" });
+  // tracking de consumibles: modo "" (no) | "nuevo" | "recompra". Solo aplica
+  // a egresos reales; el modal trae su propia lista para que los cuatro
+  // lugares que lo usan no tengan que pasarla.
+  const [consumible, setConsumible] = useState({ modo: "", id: "", nombre: "" });
+  const [consumibles, setConsumibles] = useState([]);
   // al abrir de nuevo el modal se limpia, para que no arrastre el cobro anterior
   useEffect(() => {
-    if (open) setPaypal({ activo: false, total: "" });
+    if (!open) return;
+    setPaypal({ activo: false, total: "" });
+    setConsumible(
+      tx?.consumable_id
+        ? { modo: "recompra", id: String(tx.consumable_id), nombre: "" }
+        : { modo: "", id: "", nombre: "" }
+    );
+    // con archivados: al editar una compra vieja su consumible puede estarlo
+    apiGet("/api/finance/consumables?include_archived=true")
+      .then(setConsumibles)
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  const consumibleAplica = form.type === "egreso" && !esProgramado;
+  const limpiarConsumible = () => setConsumible({ modo: "", id: "", nombre: "" });
 
   const cuentaDestino = accounts.find((a) => a.id === Number(form.account_id));
   const divisaCuenta = cuentaDestino?.currency || BASE_CURRENCY;
@@ -447,6 +465,11 @@ export function TransactionModal({
       return setError("Elige la meta destino.");
     if (otraDivisa && paypal.activo && !(Number(paypal.total) > 0))
       return setError("Escribe el total que te cobró PayPal.");
+    const nombreConsumible = (consumible.nombre || form.description).trim();
+    if (consumibleAplica && consumible.modo === "nuevo" && !nombreConsumible)
+      return setError("Ponle nombre al consumible.");
+    if (consumibleAplica && consumible.modo === "recompra" && !consumible.id)
+      return setError("Elige el consumible que recompraste.");
     setSaving(true);
     setError(null);
     try {
@@ -484,6 +507,11 @@ export function TransactionModal({
             : form.description.trim(),
           occurred_at: form.occurred_at || null,
           via_paypal: otraDivisa && paypal.activo,
+          // consumible: solo egresos reales. null quita la asociación al editar.
+          consumable_id:
+            consumibleAplica && consumible.modo === "recompra" ? Number(consumible.id) : null,
+          new_consumable_name:
+            consumibleAplica && consumible.modo === "nuevo" ? nombreConsumible : null,
         };
         if (tx) await apiPut(`/api/finance/transactions/${tx.id}`, cuerpo);
         else await apiPost("/api/finance/transactions", cuerpo);
@@ -524,7 +552,12 @@ export function TransactionModal({
               className={`flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition ${
                 form.type === value ? "bg-surface shadow-sm" : "text-ink-soft"
               }`}
-              onClick={() => setForm((f) => ({ ...f, type: value }))}
+              onClick={() => {
+                // si deja de ser egreso, ninguna selección de consumible
+                // debe sobrevivir: evita asociaciones accidentales
+                if (value !== "egreso") limpiarConsumible();
+                setForm((f) => ({ ...f, type: value }));
+              }}
             >
               {label}
             </button>
@@ -539,7 +572,11 @@ export function TransactionModal({
             <input
               type="checkbox"
               checked={esProgramado}
-              onChange={(e) => setForm((f) => ({ ...f, programado: e.target.checked }))}
+              onChange={(e) => {
+                // un programado aún no es una compra: no trackea consumibles
+                if (e.target.checked) limpiarConsumible();
+                setForm((f) => ({ ...f, programado: e.target.checked }));
+              }}
               className="mt-0.5 h-4 w-4 accent-[#2383e2]"
             />
             <span>
@@ -659,6 +696,83 @@ export function TransactionModal({
             </label>
           )}
         </div>
+
+        {/* Consumible: trackear artículos que se recompran (shampoo, creatina…)
+            para que HomeOS aprenda cada cuántos días vuelven a comprarse. Solo
+            egresos reales: un programado todavía no es una compra. */}
+        {consumibleAplica && (
+          <div className="flex flex-col gap-2 rounded-xl border border-glass-border bg-surface/50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium">🧴 Consumible</span>
+              <div className="flex gap-1 rounded-xl bg-ink/5 p-1">
+                {[
+                  ["", "No"],
+                  ["nuevo", "Nuevo"],
+                  ["recompra", "Recompra"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`rounded-lg px-3 py-1 text-xs font-medium transition ${
+                      consumible.modo === value ? "bg-surface shadow-sm" : "text-ink-soft"
+                    }`}
+                    onClick={() =>
+                      setConsumible({
+                        modo: value,
+                        id: "",
+                        // el nombre nace de la descripción, editable antes de guardar
+                        nombre: value === "nuevo" ? form.description : "",
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {consumible.modo === "" && (
+              <p className="text-xs text-ink-soft">
+                Trackea este artículo y HomeOS calculará cada cuánto vuelves a comprarlo.
+              </p>
+            )}
+            {consumible.modo === "nuevo" && (
+              <label className="flex flex-col gap-1 text-sm font-medium">
+                Nombre del consumible
+                <input
+                  className={inputCls}
+                  value={consumible.nombre}
+                  placeholder={form.description || "Creatina Birdman 600g"}
+                  onChange={(e) => setConsumible((c) => ({ ...c, nombre: e.target.value }))}
+                />
+                <span className="text-xs font-normal text-ink-soft">
+                  HomeOS registrará esta compra y calculará cada cuánto vuelves a comprarlo.
+                </span>
+              </label>
+            )}
+            {consumible.modo === "recompra" && (
+              <label className="flex flex-col gap-1 text-sm font-medium">
+                ¿Qué consumible recompraste?
+                <select
+                  className={selectCls}
+                  value={consumible.id}
+                  onChange={(e) => setConsumible((c) => ({ ...c, id: e.target.value }))}
+                >
+                  <option value="">Elegir…</option>
+                  {consumibles
+                    .filter((c) => c.active || c.id === Number(consumible.id))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.active ? "" : " (archivado)"}
+                      </option>
+                    ))}
+                </select>
+                <span className="text-xs font-normal text-ink-soft">
+                  Esta compra cuenta para su frecuencia de recompra.
+                </span>
+              </label>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium">
@@ -1724,6 +1838,59 @@ export function LoanPayModal({ open, loan, accounts, onClose, onSaved }) {
             {saving ? "Guardando…" : "✓ Registrar pago"}
           </Button>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------- Consumible ----------
+
+/** Renombrar o archivar/reactivar un consumible. Sus compras (transacciones)
+ *  no se tocan nunca desde aquí: archivar solo lo saca del selector de
+ *  recompras y de la lista por defecto. */
+export function ConsumableModal({ open, item, onClose, onSaved }) {
+  const { form, set, error, setError, saving, setSaving } = useForm(open, {
+    name: item?.name || "",
+  });
+  if (!item) return null;
+
+  const guardar = async (active) => {
+    if (!form.name.trim()) return setError("El nombre no puede quedar vacío.");
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPut(`/api/finance/consumables/${item.id}`, {
+        name: form.name.trim(),
+        active,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Editar consumible">
+      <div className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Nombre
+          <input className={inputCls} value={form.name} onChange={set("name")} autoFocus />
+        </label>
+        <p className="text-xs text-ink-soft">
+          {item.active
+            ? "Archivar lo quita del selector de recompras; su historial de compras se conserva."
+            : "Está archivado: no aparece al registrar recompras."}
+        </p>
+        {error && <p className="text-sm text-err">{error}</p>}
+        <Footer
+          onDelete={() => guardar(!item.active)}
+          deleteLabel={item.active ? "Archivar" : "Reactivar"}
+          onClose={onClose}
+          onSave={() => guardar(item.active)}
+          saving={saving}
+        />
       </div>
     </Modal>
   );

@@ -53,6 +53,7 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
   const [txs, setTxs] = useState([]);
   const [goals, setGoals] = useState([]);
   const [rates, setRates] = useState([]);
+  const [consumibles, setConsumibles] = useState([]);
   const [modal, setModal] = useState(null); // {tx?} | null
 
   const accById = Object.fromEntries(accounts.map((a) => [a.id, a]));
@@ -94,6 +95,8 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
     apiGet("/api/finance/goals").then(setGoals).catch(() => {});
     // por si se marca como programado, que puede llevar otra divisa
     apiGet("/api/finance/rates").then(setRates).catch(() => {});
+    // con archivados: las compras viejas conservan el nombre de su consumible
+    apiGet("/api/finance/consumables?include_archived=true").then(setConsumibles).catch(() => {});
   }, [tipo, periodo, mesElegido, rango, weekStart, accountFilter, categoryFilter, contextFilter]);
 
   useEffect(refresh, [refresh, version]);
@@ -195,6 +198,9 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
             const ctx = tx.context_id ? contextsById[tx.context_id] : null;
             const toAcc = tx.to_account_id ? accById[tx.to_account_id] : null;
             const toGoal = tx.to_goal_id ? goals.find((g) => g.id === tx.to_goal_id) : null;
+            const cons = tx.consumable_id
+              ? consumibles.find((c) => c.id === tx.consumable_id)
+              : null;
             return (
               <div
                 key={tx.id}
@@ -212,6 +218,7 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
                     {toGoal ? ` → 🎯 ${toGoal.name}` : ""}
                     {cat ? ` · ${cat.name}` : ""}
                     {ctx ? ` · ${ctx.name}` : ""}
+                    {cons ? ` · 🧴 ${cons.name}` : ""}
                   </p>
                 </div>
                 {tx.attachment_path && (

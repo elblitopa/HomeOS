@@ -4,6 +4,7 @@ import TopBar from "../../components/layout/TopBar.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import ResumenTab from "./ResumenTab.jsx";
 import TransactionsTab from "./TransactionsTab.jsx";
+import ConsumablesTab from "./ConsumablesTab.jsx";
 import ScheduledTab from "./ScheduledTab.jsx";
 import MetasTab from "./MetasTab.jsx";
 import PrestamosTab from "./PrestamosTab.jsx";
@@ -17,6 +18,7 @@ import DivisasPanel from "../divisas/DivisasPanel.jsx";
 const TABS = [
   { key: "resumen", label: "Resumen" },
   { key: "transacciones", label: "Transacciones" },
+  { key: "consumibles", label: "Consumibles" },
   { key: "programados", label: "Programados" },
   { key: "metas", label: "Metas" },
   { key: "prestamos", label: "Préstamos" },
@@ -83,6 +85,7 @@ export default function FinancePage() {
 
       {tab === "resumen" && <ResumenTab {...shared} />}
       {tab === "transacciones" && <TransactionsTab {...shared} />}
+      {tab === "consumibles" && <ConsumablesTab {...shared} />}
       {tab === "programados" && <ScheduledTab {...shared} />}
       {tab === "metas" && <MetasTab {...shared} />}
       {tab === "prestamos" && <PrestamosTab {...shared} />}
