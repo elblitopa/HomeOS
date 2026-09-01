@@ -30,6 +30,11 @@ export default function useInbox() {
   const [tareas, setTareas] = useState(null);
   const [programados, setProgramados] = useState(null);
   const [rutinas, setRutinas] = useState(null);
+  // para la columna de atención: actividades de negocios y suscripciones.
+  // Se piden aquí para que la bandeja reuse las MISMAS tareas ya pedidas
+  // (una entidad, muchas vistas — nunca un segundo fetch de /api/todos).
+  const [proyectos, setProyectos] = useState(null);
+  const [suscripciones, setSuscripciones] = useState(null);
 
   const refresh = useCallback(() => {
     const hoy = new Date();
@@ -44,6 +49,8 @@ export default function useInbox() {
     pide("/api/todos?status=pendiente", setTareas);
     pide("/api/finance/scheduled?status=pendiente", setProgramados);
     pide("/api/routines", setRutinas);
+    pide("/api/business/projects", setProyectos);
+    pide("/api/finance/subscriptions", setSuscripciones);
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -128,6 +135,10 @@ export default function useInbox() {
   return {
     grupos,
     rutinas: rutinas || [],
+    // crudos para la bandeja de atención: mismos registros, otra vista
+    tareas: tareas || [],
+    proyectos: proyectos || [],
+    suscripciones: suscripciones || [],
     // solo mientras no ha contestado NADA, que son un par de milisegundos
     cargando: !agenda && !tareas && !programados && !rutinas,
     // el "no hay nada" solo se enseña cuando ya contestaron todas: si no,

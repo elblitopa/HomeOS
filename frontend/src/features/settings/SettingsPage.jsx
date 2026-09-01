@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client.js";
+import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../api/client.js";
 import TopBar from "../../components/layout/TopBar.jsx";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
@@ -25,6 +25,8 @@ export default function SettingsPage() {
 
   const [nombre, setNombre] = useState("");
   const [nombreMsg, setNombreMsg] = useState(null);
+  const [portada, setPortada] = useState(null); // home_banner_path
+  const [portadaMsg, setPortadaMsg] = useState(null);
   const [frases, setFrases] = useState([]);
   const [fijadas, setFijadas] = useState([]);
   const [nuevaFrase, setNuevaFrase] = useState("");
@@ -38,9 +40,34 @@ export default function SettingsPage() {
         setNombre(s.user_name || "");
         setFrases(s.quotes_custom || []);
         setFijadas(s.quotes_pinned || []);
+        setPortada(s.home_banner_path || null);
       })
       .catch(() => {});
   }, []);
+
+  // portada de Inicio: mismo flujo que los banners de negocios (upload a
+  // /uploads/banners + el path en settings; quitar = path en null)
+  const guardarPortada = async (path) => {
+    setPortadaMsg(null);
+    try {
+      const s = await apiPut("/api/settings", { home_banner_path: path });
+      setPortada(s.home_banner_path || null);
+      setPortadaMsg({ ok: true, text: path ? "Portada guardada." : "Portada quitada." });
+    } catch (e) {
+      setPortadaMsg({ ok: false, text: e.message });
+    }
+  };
+
+  const subirPortada = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { path } = await apiUpload("/api/uploads/banner", file);
+      await guardarPortada(path);
+    } catch (err) {
+      setPortadaMsg({ ok: false, text: err.message });
+    }
+  };
 
   const guardarNombre = async () => {
     setBusy(true);
@@ -193,6 +220,33 @@ export default function SettingsPage() {
           {nombreMsg && (
             <p className={`mt-2 text-sm ${nombreMsg.ok ? "text-ok" : "text-err"}`}>
               {nombreMsg.text}
+            </p>
+          )}
+        </GlassCard>
+
+        <GlassCard className="p-5">
+          <h2 className="mb-1 font-semibold">Portada de Inicio</h2>
+          <p className="mb-3 text-sm text-ink-soft">
+            Una imagen tipo cover en la parte de arriba de Inicio. Sin imagen, Inicio
+            se ve como siempre.
+          </p>
+          {portada ? (
+            <div className="flex items-center gap-3">
+              <img src={portada} alt="" className="h-20 flex-1 rounded-xl object-cover" />
+              <button className="text-err" onClick={() => guardarPortada(null)} title="Quitar portada">
+                ✕
+              </button>
+            </div>
+          ) : (
+            <input type="file" accept="image/*" className="text-xs" onChange={subirPortada} />
+          )}
+          <p className="mt-2 text-[11px] text-ink-soft">
+            Ideal panorámica (ej. 1600 × 500 px). Se recorta al centro. Para cambiarla,
+            quítala y sube otra.
+          </p>
+          {portadaMsg && (
+            <p className={`mt-2 text-sm ${portadaMsg.ok ? "text-ok" : "text-err"}`}>
+              {portadaMsg.text}
             </p>
           )}
         </GlassCard>

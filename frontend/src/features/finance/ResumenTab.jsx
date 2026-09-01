@@ -23,7 +23,9 @@ const periodLabel = (v) => PERIODS.find((p) => p.value === v)?.label || v;
 
 /** El borde y el fondo avisan qué tan cerca está el cobro, para verlo de
  *  reojo sin leer: naranja en la última semana, rojo el mismo día o vencido. */
-function urgencia(diasRestantes) {
+// exportada para que Inicio pinte las suscripciones próximas con EXACTAMENTE
+// los mismos umbrales y colores que aquí (una sola definición de urgencia)
+export function urgencia(diasRestantes) {
   if (diasRestantes === null || diasRestantes === undefined) return "border-glass-border bg-surface/50";
   if (diasRestantes <= 0) return "border-err/40 bg-err/10";
   if (diasRestantes <= 7) return "border-amber-500/40 bg-amber-500/10";
