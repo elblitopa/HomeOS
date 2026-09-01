@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import (
     JSON,
@@ -114,6 +114,47 @@ DEFAULT_CATEGORIES = [
 ]
 
 
+class Consumable(Base):
+    """Articulo de consumo recurrente (shampoo, creatina, cafe...).
+
+    Solo guarda identidad: las compras son las Transaction de tipo egreso que
+    apuntan aqui via consumable_id, y las estadisticas (frecuencia, proxima
+    compra) se derivan SIEMPRE de esa historia real. No se persisten promedios
+    ni contadores para no tener dos fuentes de verdad. Archivar (active=0) lo
+    saca del selector de recompras sin tocar ninguna transaccion.
+    """
+
+    __tablename__ = "consumables"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    active: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def to_dict(self, purchases: list | None = None) -> dict:
+        """purchases: [(occurred_at, amount)] de sus egresos, ya ordenados
+        ascendente. Los intervalos van en dias de calendario (con .date(),
+        para que la hora de la compra no produzca fracciones)."""
+        purchases = purchases or []
+        fechas = [p[0] for p in purchases]
+        intervalos = [(b.date() - a.date()).days for a, b in zip(fechas, fechas[1:])]
+        promedio = round(sum(intervalos) / len(intervalos)) if intervalos else None
+        proxima = fechas[-1].date() + timedelta(days=promedio) if promedio is not None else None
+        return {
+            "id": self.id,
+            "name": self.name,
+            "active": bool(self.active),
+            "purchase_count": len(purchases),
+            "first_purchase_at": fechas[0].isoformat() if fechas else None,
+            "last_purchase_at": fechas[-1].isoformat() if fechas else None,
+            "last_amount": purchases[-1][1] if purchases else None,
+            "average_interval_days": promedio,
+            "next_estimated_at": proxima.isoformat() if proxima else None,
+            # positivo = faltan dias; 0 = aprox hoy; negativo = ya se esperaba
+            "days_left": (proxima - datetime.now().date()).days if proxima else None,
+        }
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
 
@@ -148,6 +189,11 @@ class Transaction(Base):
     provider_id: Mapped[int | None] = mapped_column(
         ForeignKey("providers.id", ondelete="SET NULL"), nullable=True
     )
+    # metadata de tracking: este egreso fue una compra de un consumible.
+    # No altera saldos ni conversiones; solo liga la compra a su articulo.
+    consumable_id: Mapped[int | None] = mapped_column(
+        ForeignKey("consumables.id", ondelete="SET NULL"), nullable=True
+    )
     attachment_path: Mapped[str | None] = mapped_column(String, nullable=True)
     attachment_name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -164,6 +210,7 @@ class Transaction(Base):
             "to_goal_id": self.to_goal_id,
             "context_id": self.context_id,
             "provider_id": self.provider_id,
+            "consumable_id": self.consumable_id,
             "occurred_at": self.occurred_at.isoformat(),
             "fx_rate": self.fx_rate,
             "amount_mxn": round(self.amount * (self.fx_rate or 1.0), 2),

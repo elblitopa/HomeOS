@@ -11,6 +11,7 @@ from backend.models import (
     Account,
     BASE_CURRENCY,
     Category,
+    Consumable,
     ExchangeRate,
     Goal,
     Loan,
@@ -262,6 +263,11 @@ class TransactionPayload(BaseModel):
     attachment_path: str | None = None
     attachment_name: str | None = None
     via_paypal: bool = False
+    # tracking de consumibles (solo egresos): ligar a uno existente, o crear
+    # uno nuevo en el mismo guardado. new_consumable_name NO es columna de
+    # Transaction: se resuelve a consumable_id antes de construir el modelo.
+    consumable_id: int | None = None
+    new_consumable_name: str | None = None
 
 
 @router.get("/transactions")
@@ -319,10 +325,52 @@ def _validate_tx(payload: TransactionPayload, db: Session) -> None:
             raise HTTPException(400, "No puedes transferir a la misma cuenta")
 
 
+def _resolver_consumible(payload: TransactionPayload, db: Session) -> int | None:
+    """A qué consumible queda ligado el movimiento, creándolo si es nuevo.
+
+    La creación va en la MISMA sesión que la Transaction (flush, un solo
+    commit): si el guardado truena, no queda un consumible huérfano. Un nombre
+    repetido (ignorando mayúsculas y espacios) reutiliza el artículo existente
+    en vez de duplicarlo; si estaba archivado, revive.
+    """
+    nombre_nuevo = (payload.new_consumable_name or "").strip()
+    if payload.consumable_id and nombre_nuevo:
+        raise HTTPException(400, "Elige un consumible existente O crea uno nuevo, no ambos.")
+    if not payload.consumable_id and not nombre_nuevo:
+        return None
+    # solo compras reales: los ingresos, transferencias y programados no
+    # cuentan (los programados ni siquiera traen estos campos en su payload)
+    if payload.type != "egreso":
+        raise HTTPException(400, "Solo un egreso puede ser compra de un consumible.")
+    if payload.consumable_id:
+        item = db.get(Consumable, payload.consumable_id)
+        if not item:
+            raise HTTPException(400, "Ese consumible no existe.")
+        return item.id
+    existente = (
+        db.query(Consumable)
+        .filter(func.lower(func.trim(Consumable.name)) == nombre_nuevo.lower())
+        .first()
+    )
+    if existente:
+        existente.active = 1
+        return existente.id
+    item = Consumable(name=nombre_nuevo)
+    db.add(item)
+    db.flush()  # id disponible sin commit aparte
+    return item.id
+
+
+# campos de accion del payload que no son columnas de Transaction
+_TX_CAMPOS_NO_COLUMNA = {"new_consumable_name", "consumable_id"}
+
+
 @router.post("/transactions", status_code=201)
 def create_transaction(payload: TransactionPayload, db: Session = Depends(get_db)):
     _validate_tx(payload, db)
-    data = payload.model_dump()
+    consumable_id = _resolver_consumible(payload, db)
+    data = payload.model_dump(exclude=_TX_CAMPOS_NO_COLUMNA)
+    data["consumable_id"] = consumable_id
     if not data.get("occurred_at"):
         data["occurred_at"] = datetime.now()
     # congelar el tipo de cambio del momento para que el historial no se mueva
@@ -340,10 +388,13 @@ def update_transaction(tx_id: int, payload: TransactionPayload, db: Session = De
     if not tx:
         raise HTTPException(404, "Transacción no encontrada")
     _validate_tx(payload, db)
-    for key, value in payload.model_dump().items():
+    consumable_id = _resolver_consumible(payload, db)
+    for key, value in payload.model_dump(exclude=_TX_CAMPOS_NO_COLUMNA).items():
         if key == "occurred_at" and value is None:
             continue
         setattr(tx, key, value)
+    # None también es válido: quita la asociación sin tocar nada más
+    tx.consumable_id = consumable_id
     if tx.fx_rate is None:
         account = db.get(Account, tx.account_id)
         tx.fx_rate = fx.current_rate(db, account.currency if account else None)
@@ -359,6 +410,63 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db)):
     db.delete(tx)
     db.commit()
     return {"deleted": True}
+
+
+# ---------- consumibles ----------
+
+class ConsumablePayload(BaseModel):
+    name: str = Field(min_length=1)
+    active: bool = True
+
+
+def _compras_por_consumible(db: Session) -> dict[int, list]:
+    """Compras reales de cada consumible: SOLO egresos, por fecha ascendente.
+    Las estadísticas se derivan siempre de aquí, nunca se persisten."""
+    rows = (
+        db.query(Transaction.consumable_id, Transaction.occurred_at, Transaction.amount)
+        .filter(Transaction.consumable_id.isnot(None), Transaction.type == "egreso")
+        .order_by(Transaction.occurred_at.asc())
+        .all()
+    )
+    compras: dict[int, list] = {}
+    for cid, cuando, monto in rows:
+        compras.setdefault(cid, []).append((cuando, monto))
+    return compras
+
+
+@router.get("/consumables")
+def list_consumables(include_archived: bool = False, db: Session = Depends(get_db)):
+    """Cada consumible con sus estadísticas ya agregadas (conteo, frecuencia,
+    próxima compra estimada), para que el cliente no descargue historial."""
+    q = db.query(Consumable)
+    if not include_archived:
+        q = q.filter(Consumable.active == 1)
+    compras = _compras_por_consumible(db)
+    return [c.to_dict(compras.get(c.id)) for c in q.order_by(Consumable.name).all()]
+
+
+@router.put("/consumables/{item_id}")
+def update_consumable(item_id: int, payload: ConsumablePayload, db: Session = Depends(get_db)):
+    """Renombrar y archivar/reactivar. Archivar no toca ninguna transacción:
+    solo lo saca del selector de recompras."""
+    item = db.get(Consumable, item_id)
+    if not item:
+        raise HTTPException(404, "Consumible no encontrado")
+    nombre = payload.name.strip()
+    otro = (
+        db.query(Consumable)
+        .filter(
+            func.lower(func.trim(Consumable.name)) == nombre.lower(),
+            Consumable.id != item_id,
+        )
+        .first()
+    )
+    if otro:
+        raise HTTPException(409, f"Ya existe un consumible llamado {otro.name}")
+    item.name = nombre
+    item.active = 1 if payload.active else 0
+    db.commit()
+    return item.to_dict(_compras_por_consumible(db).get(item.id))
 
 
 # ---------- metas ----------

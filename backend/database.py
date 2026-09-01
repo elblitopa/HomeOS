@@ -83,6 +83,9 @@ MIGRATIONS = [
     # a que maquina pertenece cada app (Fase 2 cloud). El app_id estable es el
     # slug que ya existia; no se genera ningun identificador nuevo.
     ("apps", "device_id", "device_id VARCHAR DEFAULT 'pc-principal'"),
+    # consumibles: un egreso puede ser la compra de un articulo trackeado.
+    # create_all corre antes que esto, asi que consumables ya existe.
+    ("transactions", "consumable_id", "consumable_id INTEGER REFERENCES consumables(id) ON DELETE SET NULL"),
 ]
 
 # Columnas que dejaron de usarse (en SQLite necesita 3.35+, incluido en Python 3.11)
