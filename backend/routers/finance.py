@@ -10,6 +10,8 @@ from backend.database import get_db
 from backend.models import (
     Account,
     BASE_CURRENCY,
+    BudgetBucket,
+    BudgetBucketCategory,
     Category,
     Consumable,
     ExchangeRate,
@@ -22,7 +24,7 @@ from backend.models import (
     Transaction,
     get_setting,
 )
-from backend.services import fx
+from backend.services import fx, mensajes_finanzas, presupuesto_pct
 from backend.services.dates import add_months
 from backend.services.excel import build_budget_xlsx
 from backend.services.periodos import rango_periodo
@@ -1579,6 +1581,102 @@ def export_budget(db: Session = Depends(get_db)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="presupuesto-{stamp}.xlsx"'},
     )
+
+
+# ---------- distribución de ingresos (buckets por porcentaje) ----------
+
+class BucketPayload(BaseModel):
+    name: str = Field(min_length=1)
+    kind: str = "max"       # max = no pasarse | min = llegar al menos
+    percent: float = Field(gt=0, le=100)
+    base: str = "real"      # real = ingresos del periodo | esperado = presupuestado
+    category_ids: list[int] = []
+
+
+def _validar_bucket(payload: BucketPayload, db: Session, bucket_id: int | None) -> None:
+    if payload.kind not in ("max", "min"):
+        raise HTTPException(400, "El tipo de objetivo es max o min")
+    if payload.base not in ("real", "esperado"):
+        raise HTTPException(400, "La base es real o esperado")
+    for cid in payload.category_ids:
+        if not db.get(Category, cid):
+            raise HTTPException(400, f"La categoría {cid} no existe")
+    # una categoría de gasto solo puede vivir en UN objetivo: sin esto, un
+    # mismo egreso contaría dos veces en la distribución
+    ocupadas = (
+        db.query(BudgetBucketCategory, BudgetBucket)
+        .join(BudgetBucket, BudgetBucket.id == BudgetBucketCategory.bucket_id)
+        .filter(BudgetBucketCategory.category_id.in_(payload.category_ids or [-1]))
+        .all()
+    )
+    for enlace, dueno in ocupadas:
+        if bucket_id is None or enlace.bucket_id != bucket_id:
+            cat = db.get(Category, enlace.category_id)
+            raise HTTPException(
+                409,
+                f"La categoría {cat.name if cat else enlace.category_id} ya pertenece "
+                f"al objetivo {dueno.name}. Quítala de ahí primero.",
+            )
+
+
+@router.get("/budget-buckets")
+def list_budget_buckets(period: str = "mensual", db: Session = Depends(get_db)):
+    """Configuración + estado calculado de cada objetivo en el periodo."""
+    return presupuesto_pct.resumen_buckets(db, period)
+
+
+@router.post("/budget-buckets", status_code=201)
+def create_budget_bucket(payload: BucketPayload, db: Session = Depends(get_db)):
+    _validar_bucket(payload, db, None)
+    bucket = BudgetBucket(
+        name=payload.name.strip(), kind=payload.kind,
+        percent=payload.percent, base=payload.base,
+    )
+    db.add(bucket)
+    db.flush()
+    for cid in payload.category_ids:
+        db.add(BudgetBucketCategory(bucket_id=bucket.id, category_id=cid))
+    db.commit()
+    return bucket.to_dict()
+
+
+@router.put("/budget-buckets/{bucket_id}")
+def update_budget_bucket(bucket_id: int, payload: BucketPayload, db: Session = Depends(get_db)):
+    bucket = db.get(BudgetBucket, bucket_id)
+    if not bucket:
+        raise HTTPException(404, "Objetivo no encontrado")
+    _validar_bucket(payload, db, bucket_id)
+    bucket.name = payload.name.strip()
+    bucket.kind = payload.kind
+    bucket.percent = payload.percent
+    bucket.base = payload.base
+    # las categorías se reemplazan completas: el payload es la verdad
+    db.query(BudgetBucketCategory).filter(
+        BudgetBucketCategory.bucket_id == bucket_id
+    ).delete()
+    for cid in payload.category_ids:
+        db.add(BudgetBucketCategory(bucket_id=bucket_id, category_id=cid))
+    db.commit()
+    return bucket.to_dict()
+
+
+@router.delete("/budget-buckets/{bucket_id}")
+def delete_budget_bucket(bucket_id: int, db: Session = Depends(get_db)):
+    """Borra la CONFIGURACIÓN del objetivo; jamás toca transacciones."""
+    bucket = db.get(BudgetBucket, bucket_id)
+    if not bucket:
+        raise HTTPException(404, "Objetivo no encontrado")
+    db.delete(bucket)  # sus enlaces de categoría caen en cascada
+    db.commit()
+    return {"deleted": True}
+
+
+@router.get("/alerts")
+def finance_alerts(db: Session = Depends(get_db)):
+    """Alertas financieras vigentes (presupuestos y tarjetas). Es estado
+    calculado, no eventos guardados: por eso no puede duplicarse ni hacer
+    spam — siempre describe el ahora."""
+    return mensajes_finanzas.alertas(db)
 
 
 # ---------- resumen ----------

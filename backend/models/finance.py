@@ -230,6 +230,59 @@ class Transaction(Base):
         }
 
 
+class BudgetBucket(Base):
+    """Objetivo de distribución de ingresos: "Compras máximo 15%" o
+    "Inversión mínimo 20%".
+
+    Solo guarda la configuración; lo gastado/destinado se deriva SIEMPRE de
+    las transacciones reales (egresos de sus categorías) contra el ingreso
+    del periodo, así que editar una transacción recalcula todo solo. kind
+    distingue la semántica: max = no pasarse (gasto), min = llegar al menos
+    (ahorro/inversión). base = contra qué ingreso se mide: "real" (lo que
+    entró en el periodo) o "esperado" (lo presupuestado en las cuentas).
+    """
+
+    __tablename__ = "budget_buckets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    kind: Mapped[str] = mapped_column(String, default="max")  # max | min
+    percent: Mapped[float] = mapped_column(Float, nullable=False)
+    base: Mapped[str] = mapped_column(String, default="real")  # real | esperado
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "kind": self.kind,
+            "percent": self.percent,
+            "base": self.base,
+            "sort_order": self.sort_order,
+        }
+
+
+class BudgetBucketCategory(Base):
+    """Qué categorías de gasto alimentan cada objetivo.
+
+    El UNIQUE sobre category_id es la regla del sistema: una categoría solo
+    puede pertenecer a UN objetivo, para que un mismo gasto jamás se cuente
+    dos veces en la distribución.
+    """
+
+    __tablename__ = "budget_bucket_categories"
+    __table_args__ = (UniqueConstraint("category_id", name="uq_bucket_categoria"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bucket_id: Mapped[int] = mapped_column(
+        ForeignKey("budget_buckets.id", ondelete="CASCADE"), nullable=False
+    )
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id", ondelete="CASCADE"), nullable=False
+    )
+
+
 class Goal(Base):
     """Meta de ahorro. Lo guardado se calcula con transferencias hacia la meta."""
 

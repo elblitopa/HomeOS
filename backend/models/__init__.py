@@ -16,6 +16,8 @@ from backend.models.file_entry import FileEntry, kind_for
 from backend.models.finance import (
     Account,
     BASE_CURRENCY,
+    BudgetBucket,
+    BudgetBucketCategory,
     Category,
     Consumable,
     DEFAULT_CATEGORIES,
@@ -41,6 +43,8 @@ __all__ = [
     "AgentCommand",
     "AppEntry",
     "BASE_CURRENCY",
+    "BudgetBucket",
+    "BudgetBucketCategory",
     "ExchangeRate",
     "BizDoc",
     "BizMessage",

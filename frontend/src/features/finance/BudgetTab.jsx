@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
-import { apiGet } from "../../api/client.js";
+import { useCallback, useEffect, useState } from "react";
+import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
+import Modal from "../../components/ui/Modal.jsx";
 import { BASE_CURRENCY, PERIODS } from "../../lib/constants.js";
+import { inputCls } from "../todos/TaskFormModal.jsx";
 import { usePrivacidad } from "./privacidad.jsx";
 
 const KIND_ICON = {
@@ -24,14 +26,182 @@ function Stat({ label, value, tone = "", hint }) {
   );
 }
 
-export default function BudgetTab({ version }) {
-  const { money } = usePrivacidad();
+// tono visual por estado; el texto del mensaje siempre acompaña al color
+// para que el semáforo nunca sea la única señal (accesibilidad)
+const ESTADO_BUCKET = {
+  ok: { icono: "🟢", barra: "#2f9e44" },
+  aviso: { icono: "🟠", barra: "#f59e0b" },
+  cerca: { icono: "🟠", barra: "#e8590c" },
+  al_limite: { icono: "🔴", barra: "#e03131" },
+  excedido: { icono: "🔴", barra: "#e03131" },
+  cumplido: { icono: "🟢", barra: "#2f9e44" },
+  debajo: { icono: "🟡", barra: "#f59e0b" },
+  sin_base: { icono: "⚪", barra: "#868e96" },
+};
+
+function BarraBucket({ value, color }) {
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-ink/10" role="presentation">
+      <div
+        className="h-full rounded-full transition-all"
+        style={{ width: `${Math.min(100, (value || 0) * 100)}%`, backgroundColor: color }}
+      />
+    </div>
+  );
+}
+
+/** Alta/edición de un objetivo de distribución (bucket). */
+function BucketModal({ open, item, categories, onClose, onSaved }) {
+  const [form, setForm] = useState({});
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm({
+        name: item?.name || "",
+        kind: item?.kind || "max",
+        percent: item?.percent ?? "",
+        base: item?.base || "real",
+        category_ids: item?.category_ids || [],
+      });
+      setError(null);
+    }
+  }, [open, item]);
+
+  const toggleCat = (id) =>
+    setForm((f) => ({
+      ...f,
+      category_ids: f.category_ids.includes(id)
+        ? f.category_ids.filter((c) => c !== id)
+        : [...f.category_ids, id],
+    }));
+
+  const save = async () => {
+    if (!form.name.trim()) return setError("Ponle nombre al objetivo.");
+    const pct = Number(form.percent);
+    if (!(pct > 0 && pct <= 100)) return setError("El porcentaje va de 1 a 100.");
+    const payload = {
+      name: form.name.trim(),
+      kind: form.kind,
+      percent: pct,
+      base: form.base,
+      category_ids: form.category_ids,
+    };
+    try {
+      if (item) await apiPut(`/api/finance/budget-buckets/${item.id}`, payload);
+      else await apiPost("/api/finance/budget-buckets", payload);
+      onSaved();
+    } catch (e) {
+      setError(e.message); // p. ej. el 409 de categoría ya ocupada
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm(`¿Eliminar el objetivo "${item.name}"? Tus transacciones no se tocan.`)) return;
+    await apiDelete(`/api/finance/budget-buckets/${item.id}`);
+    onSaved();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={item ? "Editar objetivo" : "Nuevo objetivo"}>
+      <div className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Nombre
+          <input className={inputCls} value={form.name || ""} autoFocus
+                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                 placeholder="Compras personales, Inversiones…" />
+        </label>
+
+        <div className="flex flex-col gap-1.5 text-sm font-medium">
+          Tipo de objetivo
+          <div className="flex gap-1 rounded-xl bg-ink/5 p-1">
+            {[
+              ["max", "Máximo — no pasarme"],
+              ["min", "Mínimo — destinar al menos"],
+            ].map(([value, label]) => (
+              <button key={value}
+                      onClick={() => setForm((f) => ({ ...f, kind: value }))}
+                      className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                        form.kind === value ? "bg-surface shadow-sm" : "text-ink-soft"
+                      }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Porcentaje del ingreso
+            <input type="number" inputMode="decimal" min="1" max="100" step="0.5"
+                   className={inputCls} value={form.percent ?? ""}
+                   onChange={(e) => setForm((f) => ({ ...f, percent: e.target.value }))}
+                   placeholder="15" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Medir contra
+            <select className={inputCls} value={form.base || "real"}
+                    onChange={(e) => setForm((f) => ({ ...f, base: e.target.value }))}>
+              <option value="real">Ingresos reales del periodo</option>
+              <option value="esperado">Ingreso esperado (presupuestado)</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="flex flex-col gap-1.5 text-sm font-medium">
+          Categorías que cuentan aquí
+          <span className="text-[11px] font-normal text-ink-soft">
+            Una categoría solo puede vivir en UN objetivo, para que ningún gasto
+            se cuente dos veces.
+          </span>
+          <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto pt-1">
+            {categories.map((c) => (
+              <button key={c.id} onClick={() => toggleCat(c.id)}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                        form.category_ids?.includes(c.id)
+                          ? "bg-accent text-white"
+                          : "bg-ink/5 text-ink-soft hover:bg-accent-soft"
+                      }`}>
+                {c.icon} {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-err">{error}</p>}
+        <div className="flex justify-between gap-2">
+          {item ? (
+            <Button variant="danger" onClick={remove}>Eliminar</Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button onClick={save}>Guardar</Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+export default function BudgetTab({ version, categories = [] }) {
+  const { money, oculto } = usePrivacidad();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  // distribución de ingresos por porcentaje
+  const [dist, setDist] = useState(null);
+  const [periodo, setPeriodo] = useState("mensual");
+  const [modal, setModal] = useState(null); // null | {} | {item}
+
+  const cargarDist = useCallback(() => {
+    apiGet(`/api/finance/budget-buckets?period=${periodo}`).then(setDist).catch(() => {});
+  }, [periodo]);
 
   useEffect(() => {
     apiGet("/api/finance/budget").then(setData).catch((e) => setError(e.message));
   }, [version]);
+  useEffect(cargarDist, [cargarDist, version]);
 
   if (error) return <GlassCard className="p-6 text-sm text-err">{error}</GlassCard>;
   if (!data) return <p className="text-sm text-ink-soft">Calculando…</p>;
@@ -39,6 +209,10 @@ export default function BudgetTab({ version }) {
   const t = data.totals;
   const grupos = ["Suscripción", "Pago recurrente", "Meta"];
   const alcanza = t.balance_expected >= 0;
+  // los mensajes del backend traen cifras; con privacidad prendida se tapan
+  const textoBucket = (b) => (oculto ? b.mensaje.replace(/\$[\d,]+(\.\d+)?/g, "••••") : b.mensaje);
+  const etiquetaObjetivo = (b) =>
+    `${b.spent_pct_of_income ?? "—"}% / ${b.kind === "max" ? "máx." : "mín."} ${b.percent}%`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,6 +241,66 @@ export default function BudgetTab({ version }) {
           hint={alcanza ? "con tu ingreso esperado alcanza" : "tu ingreso esperado no alcanza"}
         />
       </div>
+
+      <section>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-ink-soft">📊 Distribución de ingresos</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 rounded-xl bg-ink/5 p-1">
+              {[["mensual", "Mes"], ["anual", "Año"]].map(([value, label]) => (
+                <button key={value} onClick={() => setPeriodo(value)}
+                        className={`rounded-lg px-3 py-1 text-xs font-medium transition ${
+                          periodo === value ? "bg-surface shadow-sm" : "text-ink-soft"
+                        }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Button variant="ghost" onClick={() => setModal({})}>＋ Objetivo</Button>
+          </div>
+        </div>
+
+        {!dist || dist.buckets.length === 0 ? (
+          <GlassCard className="p-8 text-center text-sm text-ink-soft">
+            Decide qué porcentaje de tus ingresos va a cada cosa: un máximo para
+            gasto (Compras ≤ 15%) o un mínimo para lo bueno (Inversión ≥ 20%).
+            Crea el primero con ＋ Objetivo.
+          </GlassCard>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-ink-soft">
+              {dist.label} · ingreso real {money(dist.income_real)} · esperado{" "}
+              {money(dist.income_esperado)}
+              {periodo === "anual" &&
+                " · el año se mide como acumulado real (gastado del año / ingresos del año)"}
+            </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {dist.buckets.map((b) => {
+                const tono = ESTADO_BUCKET[b.estado] || ESTADO_BUCKET.sin_base;
+                return (
+                  <GlassCard key={b.id} className="cursor-pointer p-4 transition hover:bg-surface/75"
+                             onClick={() => setModal({ item: b })}>
+                    <div className="mb-1 flex items-baseline justify-between gap-2">
+                      <p className="truncate text-sm font-medium">
+                        {b.kind === "min" ? "📈" : "🛍️"} {b.name}
+                      </p>
+                      <span className="shrink-0 text-xs font-semibold">
+                        {etiquetaObjetivo(b)} <span aria-hidden="true">{tono.icono}</span>
+                      </span>
+                    </div>
+                    <BarraBucket value={b.progress} color={tono.barra} />
+                    <p className="mt-1.5 text-xs text-ink-soft">
+                      {textoBucket(b)}
+                      {b.estado !== "sin_base" &&
+                        ` · ${oculto ? "••••" : `${money(b.spent_amount)} de ${money(b.target_amount)}`}`}
+                    </p>
+                  </GlassCard>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-ink-soft">Compromisos del mes</h2>
@@ -160,6 +394,17 @@ export default function BudgetTab({ version }) {
         prorratean (una suscripción anual cuenta como su doceava parte), y de cada meta se
         reparte lo que falta entre los meses que quedan hasta su fecha límite.
       </p>
+
+      <BucketModal
+        open={!!modal}
+        item={modal?.item}
+        categories={categories}
+        onClose={() => setModal(null)}
+        onSaved={() => {
+          setModal(null);
+          cargarDist();
+        }}
+      />
     </div>
   );
 }
