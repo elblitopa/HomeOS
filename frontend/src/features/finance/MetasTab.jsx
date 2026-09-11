@@ -3,8 +3,8 @@ import { apiGet } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import { fmtMoney } from "../../lib/constants.js";
 import { GoalModal } from "./FinanceModals.jsx";
+import { usePrivacidad } from "./privacidad.jsx";
 
 /** Todas las metas como página: primero las que faltan por alcanzar y luego
  *  las completadas — celebradas con su palomita, nunca como "vencidas".
@@ -22,6 +22,7 @@ function Progreso({ value, color = "#2383e2" }) {
 }
 
 function TarjetaMeta({ g, onClick }) {
+  const { money } = usePrivacidad();
   return (
     <GlassCard
       banner={miniatura(g.banner_path, 640)}
@@ -54,12 +55,12 @@ function TarjetaMeta({ g, onClick }) {
         </div>
         <Progreso value={g.progress} color={g.completed ? "#2f9e44" : "#2383e2"} />
         <p className="mt-1.5 text-sm text-ink-soft">
-          {fmtMoney(g.saved_amount)} de {fmtMoney(g.target_amount)}{" "}
+          {money(g.saved_amount)} de {money(g.target_amount)}{" "}
           <span className="font-medium text-ink">({Math.round(g.progress * 100)}%)</span>
         </p>
         {!g.completed && g.target_amount > g.saved_amount && (
           <p className="text-xs text-ink-soft">
-            Falta {fmtMoney(g.target_amount - g.saved_amount)}
+            Falta {money(g.target_amount - g.saved_amount)}
           </p>
         )}
       </div>

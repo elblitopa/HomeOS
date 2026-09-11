@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import { fmtMoney } from "../../lib/constants.js";
+import { usePrivacidad } from "./privacidad.jsx";
 import { inputCls } from "../todos/TaskFormModal.jsx";
 
 export default function CategoriesTab({ categories, reload, version }) {
+  const { money } = usePrivacidad();
   const [summary, setSummary] = useState({ by_category: {} });
   const [newName, setNewName] = useState("");
   const [newIcon, setNewIcon] = useState("🏷️");
@@ -80,15 +81,15 @@ export default function CategoriesTab({ categories, reload, version }) {
               <div className="flex flex-col gap-0.5 text-sm">
                 <p className="flex justify-between">
                   <span className="text-ink-soft">Ingresos:</span>
-                  <span className="font-medium text-ok">{fmtMoney(t.ingresos)}</span>
+                  <span className="font-medium text-ok">{money(t.ingresos)}</span>
                 </p>
                 <p className="flex justify-between">
                   <span className="text-ink-soft">Egresos:</span>
-                  <span className="font-medium text-err">{fmtMoney(t.egresos)}</span>
+                  <span className="font-medium text-err">{money(t.egresos)}</span>
                 </p>
                 <p className="flex justify-between border-t border-ink/5 pt-1">
                   <span className="text-ink-soft">Balance:</span>
-                  <span className="font-semibold">{fmtMoney(t.balance)}</span>
+                  <span className="font-semibold">{money(t.balance)}</span>
                 </p>
               </div>
             </GlassCard>

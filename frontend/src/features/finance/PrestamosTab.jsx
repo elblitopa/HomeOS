@@ -3,8 +3,8 @@ import { apiGet, apiPost } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import TelefonoCliente from "../../components/ui/TelefonoCliente.jsx";
-import { fmtMoney } from "../../lib/constants.js";
 import { LoanModal, LoanPayModal } from "./FinanceModals.jsx";
+import { usePrivacidad } from "./privacidad.jsx";
 
 /** Préstamos a personas: a quién, cuánto, de qué cuenta, cuándo prometió
  *  pagar (visible también en el calendario) y su teléfono para cobrarle por
@@ -25,6 +25,7 @@ function urgencia(l) {
 }
 
 export default function PrestamosTab({ accounts, reload, version }) {
+  const { money } = usePrivacidad();
   const [loans, setLoans] = useState([]);
   const [modal, setModal] = useState(null); // {type: "loan"|"pay", data?}
   const [verPagados, setVerPagados] = useState(false);
@@ -65,12 +66,12 @@ export default function PrestamosTab({ accounts, reload, version }) {
         <TelefonoCliente phone={l.phone} className="text-xs" />
       </div>
       <p className="mt-1 text-sm">
-        {fmtMoney(l.amount, l.currency)}
+        {money(l.amount, l.currency)}
         {(l.expected_amount || l.amount) !== l.amount && (
-          <span className="text-ink-soft"> → espero {fmtMoney(l.expected_amount, l.currency)}</span>
+          <span className="text-ink-soft"> → espero {money(l.expected_amount, l.currency)}</span>
         )}
         {l.status === "pagado" && l.received_amount != null && (
-          <span className="text-ok"> · recibí {fmtMoney(l.received_amount, l.currency)}</span>
+          <span className="text-ok"> · recibí {money(l.received_amount, l.currency)}</span>
         )}
       </p>
       <p className="mt-0.5 text-xs text-ink-soft">
@@ -116,7 +117,7 @@ export default function PrestamosTab({ accounts, reload, version }) {
           <h2 className="text-sm font-semibold text-ink-soft">🤝 Dinero prestado</h2>
           {activos.length > 0 && (
             <p className="text-xs text-ink-soft">
-              Por cobrar: <span className="font-medium text-ink">{fmtMoney(totalPorCobrar)}</span>
+              Por cobrar: <span className="font-medium text-ink">{money(totalPorCobrar)}</span>
               {" "}en {activos.length} préstamo{activos.length > 1 ? "s" : ""}
             </p>
           )}

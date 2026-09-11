@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../../api/client.js";
 import useCardSort from "../../hooks/useCardSort.js";
 import Button from "../../components/ui/Button.jsx";
@@ -6,7 +7,8 @@ import Carousel from "../../components/ui/Carousel.jsx";
 import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { COLOR_TIPO, IconoTipo } from "../../components/ui/TipoBadge.jsx";
-import { BASE_CURRENCY, fmtMoney, kindOf, PERIODS } from "../../lib/constants.js";
+import { BASE_CURRENCY, kindOf, PERIODS } from "../../lib/constants.js";
+import { usePrivacidad } from "./privacidad.jsx";
 import {
   AccountModal,
   AjusteModal,
@@ -44,6 +46,8 @@ function ProgressBar({ value, color = "#2383e2" }) {
 }
 
 export default function ResumenTab({ accounts, categories, contexts, reload, version, goTab }) {
+  const { money } = usePrivacidad();
+  const navigate = useNavigate();
   const [goals, setGoals] = useState([]);
   const [recurring, setRecurring] = useState([]);
   const [subs, setSubs] = useState([]);
@@ -184,22 +188,22 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
             <p className="text-xs text-ink-soft">
               Total de todas tus cuentas{hasForeign ? " (convertido a MXN)" : ""}
             </p>
-            <p className="text-2xl font-bold">{fmtMoney(totalMxn)}</p>
+            <p className="text-2xl font-bold">{money(totalMxn)}</p>
           </GlassCard>
         )}
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <GlassCard className="p-4">
             <p className="text-xs text-ink-soft">Hoy · Ingresos</p>
-            <p className="text-lg font-bold text-ok">{fmtMoney(today.ingresos)}</p>
+            <p className="text-lg font-bold text-ok">{money(today.ingresos)}</p>
           </GlassCard>
           <GlassCard className="p-4">
             <p className="text-xs text-ink-soft">Hoy · Egresos</p>
-            <p className="text-lg font-bold text-err">{fmtMoney(today.egresos)}</p>
+            <p className="text-lg font-bold text-err">{money(today.egresos)}</p>
           </GlassCard>
           <GlassCard className="p-4 max-md:col-span-2">
             <p className="text-xs text-ink-soft">Hoy · Balance</p>
-            <p className="text-lg font-bold">{fmtMoney(today.ingresos - today.egresos)}</p>
+            <p className="text-lg font-bold">{money(today.ingresos - today.egresos)}</p>
           </GlassCard>
         </div>
 
@@ -241,7 +245,9 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                         >
                           ⠿
                         </button>
-                        <div className="p-4" onClick={() => setModal({ type: "account", data: a })}>
+                        {/* la tarjeta abre el detalle de la cuenta; editar
+                            vive adentro, en el botón Editar del encabezado */}
+                        <div className="p-4" onClick={() => navigate(`/finanzas/cuentas/${a.id}`)}>
                           <div className="mb-2 flex items-center justify-between">
                             <span className="flex items-center gap-2 font-medium">
                               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: a.color }} />
@@ -256,10 +262,10 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                               {section.key === "negocio" ? kindOf(a.kind).label : a.scope}
                             </span>
                           </div>
-                          <p className="text-xl font-bold">{fmtMoney(a.balance, a.currency)}</p>
+                          <p className="text-xl font-bold">{money(a.balance, a.currency)}</p>
                           {a.currency !== BASE_CURRENCY && (
                             <p className="text-xs font-medium text-accent">
-                              ≈ {fmtMoney(a.balance_mxn)} MXN
+                              ≈ {money(a.balance_mxn)} MXN
                             </p>
                           )}
                           <p className="text-xs text-ink-soft">
@@ -305,7 +311,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                       ·{" "}
                       <span className={p.type === "ingreso" ? "text-ok" : "text-err"}>
                         {p.type === "ingreso" ? "+" : "−"}
-                        {fmtMoney(p.amount, p.currency)}
+                        {money(p.amount, p.currency)}
                       </span>
                     </p>
                   </div>
@@ -384,7 +390,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                     </div>
                     <ProgressBar value={g.progress} />
                     <p className="mt-1 text-xs text-ink-soft">
-                      {fmtMoney(g.saved_amount)} de {fmtMoney(g.target_amount)} ({Math.round(g.progress * 100)}%)
+                      {money(g.saved_amount)} de {money(g.target_amount)} ({Math.round(g.progress * 100)}%)
                     </p>
                   </div>
                 </div>
@@ -424,13 +430,13 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                   </div>
                   <ProgressBar value={r.progress} color={r.done ? "#2f9e44" : cobro ? "#2f9e44" : "#2383e2"} />
                   <p className="mt-1 text-xs text-ink-soft">
-                    {cobro ? "Recibido" : "Pagado"} {fmtMoney(r.paid_amount, r.currency)} · Falta{" "}
-                    {fmtMoney(r.pending_amount, r.currency)}
+                    {cobro ? "Recibido" : "Pagado"} {money(r.paid_amount, r.currency)} · Falta{" "}
+                    {money(r.pending_amount, r.currency)}
                   </p>
                   {r.currency !== BASE_CURRENCY && (
                     <p className="text-xs font-medium text-accent">
-                      {cobro ? "Abono" : "Cuota"} {fmtMoney(r.installment_amount, r.currency)} ≈{" "}
-                      {fmtMoney(r.installment_amount_mxn)} MXN
+                      {cobro ? "Abono" : "Cuota"} {money(r.installment_amount, r.currency)} ≈{" "}
+                      {money(r.installment_amount_mxn)} MXN
                     </p>
                   )}
                   {!r.done && (
@@ -482,7 +488,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                 <div className="min-w-0 cursor-pointer" onClick={() => setModal({ type: "sub", data: s })}>
                   <p className="truncate text-sm font-medium">{s.name}</p>
                   <p className="text-xs text-ink-soft">
-                    {fmtMoney(s.amount, s.currency)} · {periodLabel(s.period)}
+                    {money(s.amount, s.currency)} · {periodLabel(s.period)}
                     {s.next_due &&
                       ` · ${
                         s.days_left < 0
@@ -494,7 +500,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                   </p>
                   {s.currency !== BASE_CURRENCY && (
                     <p className="text-xs font-medium text-accent">
-                      ≈ {fmtMoney(s.amount_mxn)} MXN
+                      ≈ {money(s.amount_mxn)} MXN
                     </p>
                   )}
                 </div>

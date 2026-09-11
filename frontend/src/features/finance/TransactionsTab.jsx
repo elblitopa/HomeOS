@@ -5,8 +5,9 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import Button from "../../components/ui/Button.jsx";
 import TipoBadge from "../../components/ui/TipoBadge.jsx";
 import { dayKey } from "../../lib/calendarKinds.js";
-import { fmtMoney, formatDateTime } from "../../lib/constants.js";
+import { formatDateTime } from "../../lib/constants.js";
 import { TransactionModal } from "./FinanceModals.jsx";
+import { usePrivacidad } from "./privacidad.jsx";
 
 // antes los chips mezclaban tipo y fecha ("ingresos de hoy"); ahora el tipo
 // va en chips y el periodo en su propio filtro, que combinados cubren lo mismo
@@ -42,6 +43,7 @@ const sumaDias = (d, n) => {
 };
 
 export default function TransactionsTab({ accounts, categories, contexts, contextsById, reload, version }) {
+  const { money } = usePrivacidad();
   const [tipo, setTipo] = useState("");
   const [periodo, setPeriodo] = useState("todo");
   const [mesElegido, setMesElegido] = useState(""); // "2026-07"
@@ -105,9 +107,9 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
     "rounded-xl border border-glass-border bg-surface/70 px-2.5 py-1.5 text-sm outline-none";
 
   const badge = (tx) => {
-    if (tx.type === "ingreso") return <span className="font-semibold text-ok">+{fmtMoney(tx.amount)}</span>;
-    if (tx.type === "egreso") return <span className="font-semibold text-err">−{fmtMoney(tx.amount)}</span>;
-    return <span className="font-semibold text-accent">⇄ {fmtMoney(tx.amount)}</span>;
+    if (tx.type === "ingreso") return <span className="font-semibold text-ok">+{money(tx.amount)}</span>;
+    if (tx.type === "egreso") return <span className="font-semibold text-err">−{money(tx.amount)}</span>;
+    return <span className="font-semibold text-accent">⇄ {money(tx.amount)}</span>;
   };
 
   return (

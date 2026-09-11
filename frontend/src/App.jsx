@@ -8,6 +8,7 @@ import BusinessDetailPage from "./features/business/BusinessDetailPage.jsx";
 import CalendarPage from "./features/calendar/CalendarPage.jsx";
 import FilesPage from "./features/files/FilesPage.jsx";
 import FinancePage from "./features/finance/FinancePage.jsx";
+import AccountDetailPage from "./features/finance/AccountDetailPage.jsx";
 import NotesPage from "./features/notes/NotesPage.jsx";
 import RoutinesPage from "./features/routines/RoutinesPage.jsx";
 import SettingsPage from "./features/settings/SettingsPage.jsx";
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="/calendario" element={<CalendarPage />} />
           <Route path="/tareas" element={<TodosPage />} />
           <Route path="/finanzas" element={<FinancePage />} />
+          <Route path="/finanzas/cuentas/:accountId" element={<AccountDetailPage />} />
           <Route path="/negocios" element={<BusinessIndexPage />} />
           <Route path="/negocios/:id" element={<BusinessDetailPage />} />
           <Route path="/rutinas" element={<RoutinesPage />} />

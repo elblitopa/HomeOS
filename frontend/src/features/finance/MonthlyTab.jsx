@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../../api/client.js";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import { fmtMoney, monthLabel } from "../../lib/constants.js";
+import { monthLabel } from "../../lib/constants.js";
+import { usePrivacidad } from "./privacidad.jsx";
 
 export default function MonthlyTab({ version }) {
+  const { money } = usePrivacidad();
   const [summary, setSummary] = useState({ by_month: {} });
 
   useEffect(() => {
@@ -28,16 +30,16 @@ export default function MonthlyTab({ version }) {
           <div className="flex flex-col gap-0.5 text-sm">
             <p className="flex justify-between">
               <span className="text-ink-soft">Ingresos:</span>
-              <span className="font-medium text-ok">{fmtMoney(t.ingresos)}</span>
+              <span className="font-medium text-ok">{money(t.ingresos)}</span>
             </p>
             <p className="flex justify-between">
               <span className="text-ink-soft">Egresos:</span>
-              <span className="font-medium text-err">{fmtMoney(t.egresos)}</span>
+              <span className="font-medium text-err">{money(t.egresos)}</span>
             </p>
             <p className="flex justify-between border-t border-ink/5 pt-1">
               <span className="text-ink-soft">Balance:</span>
               <span className={`font-semibold ${t.balance < 0 ? "text-err" : ""}`}>
-                {fmtMoney(t.balance)}
+                {money(t.balance)}
               </span>
             </p>
           </div>

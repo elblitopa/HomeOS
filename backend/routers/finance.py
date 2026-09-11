@@ -20,10 +20,12 @@ from backend.models import (
     ScheduledTransaction,
     Subscription,
     Transaction,
+    get_setting,
 )
 from backend.services import fx
 from backend.services.dates import add_months
 from backend.services.excel import build_budget_xlsx
+from backend.services.periodos import rango_periodo
 from backend.services.saldos import goal_saved
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
@@ -202,6 +204,122 @@ def adjust_account(acc_id: int, payload: AdjustPayload, db: Session = Depends(ge
         "old_balance": actual,
         "new_balance": payload.real_balance,
         "delta": delta,
+    }
+
+
+@router.get("/accounts/{acc_id}/detail")
+def account_detail(
+    acc_id: int,
+    period: str = "mes",
+    desde: datetime | None = Query(default=None, alias="from"),
+    hasta: datetime | None = Query(default=None, alias="to"),
+    type: str | None = None,  # ingreso|egreso|transferencia
+    category_id: int | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """La vista completa de UNA cuenta: métricas del periodo + su historial.
+
+    Las métricas cuentan SOLO ingresos y egresos: las transferencias entre
+    cuentas propias mueven dinero de bolsillo, no son ganancia ni gasto, así
+    que no inflan nada (van aparte como entradas/salidas). El filtro `type`
+    solo acota el historial; el de categoría acota ambos.
+    """
+    acc = db.get(Account, acc_id)
+    if not acc:
+        raise HTTPException(404, "Cuenta no encontrada")
+    if type and type not in ("ingreso", "egreso", "transferencia"):
+        raise HTTPException(400, "Tipo inválido")
+
+    week_start = get_setting(db, "week_starts_on") or "monday"
+    ini, fin = rango_periodo(period, desde, hasta, week_start)
+
+    def en_rango(q):
+        if ini is not None:
+            q = q.filter(Transaction.occurred_at >= ini, Transaction.occurred_at < fin)
+        return q
+
+    # ---- métricas (en la divisa de la cuenta) ----
+    qt = en_rango(
+        db.query(Transaction.type, func.sum(Transaction.amount))
+        .filter(Transaction.account_id == acc_id)
+    )
+    if category_id:
+        qt = qt.filter(Transaction.category_id == category_id)
+    por_tipo = {t: total or 0.0 for t, total in qt.group_by(Transaction.type)}
+    ingresos = round(por_tipo.get("ingreso", 0.0), 2)
+    egresos = round(por_tipo.get("egreso", 0.0), 2)
+    transf_salida = round(por_tipo.get("transferencia", 0.0), 2)
+
+    # transferencias recibidas: el monto viaja en la divisa de la cuenta
+    # origen y se convierte igual que en los saldos (misma aritmética)
+    rates = {r.code: r.rate_to_mxn for r in db.query(ExchangeRate).all()}
+    monedas = {a.id: a.currency for a in db.query(Account).all()}
+    tasa_destino = rates.get(acc.currency, 1.0) or 1.0
+    entrantes = en_rango(
+        db.query(Transaction).filter(
+            Transaction.type == "transferencia", Transaction.to_account_id == acc_id
+        )
+    ).all()
+    transf_entrada = 0.0
+    convertida = {}
+    for t in entrantes:
+        tasa_origen = t.fx_rate or rates.get(monedas.get(t.account_id), 1.0) or 1.0
+        convertida[t.id] = round(t.amount * (tasa_origen / tasa_destino), 2)
+        transf_entrada += convertida[t.id]
+
+    # ---- historial (incluye transferencias recibidas: mueven el saldo) ----
+    propio = Transaction.account_id == acc_id
+    recibido = Transaction.to_account_id == acc_id
+    if type == "transferencia":
+        cond = (Transaction.type == "transferencia") & (propio | recibido)
+    elif type:
+        cond = (Transaction.type == type) & propio
+    else:
+        cond = propio | recibido
+    qh = en_rango(db.query(Transaction).filter(cond))
+    if category_id:
+        qh = qh.filter(Transaction.category_id == category_id)
+    total_count = qh.count()
+    filas = (
+        qh.order_by(Transaction.occurred_at.desc(), Transaction.id.desc())
+        .offset(max(0, offset))
+        .limit(min(limit, 200))
+        .all()
+    )
+
+    def fila(t: Transaction) -> dict:
+        entrante = t.to_account_id == acc_id and t.account_id != acc_id
+        data = {**t.to_dict(), "incoming": entrante}
+        if entrante:
+            data["amount_in_account"] = convertida.get(
+                t.id, round(t.amount * ((t.fx_rate or 1.0) / tasa_destino), 2)
+            )
+        return data
+
+    balance = _account_balances(db).get(acc_id, 0.0)
+    return {
+        "account": {
+            **acc.to_dict(),
+            "balance": balance,
+            "balance_mxn": round(balance * tasa_destino, 2),
+        },
+        "period": {
+            "key": period,
+            "from": ini.isoformat() if ini else None,
+            "to": fin.isoformat() if fin else None,
+        },
+        "totals": {
+            "ingresos": ingresos,
+            "egresos": egresos,
+            "flujo_neto": round(ingresos - egresos, 2),
+            "transferencias_salida": transf_salida,
+            "transferencias_entrada": round(transf_entrada, 2),
+        },
+        "transactions": [fila(t) for t in filas],
+        "total_count": total_count,
+        "has_more": offset + len(filas) < total_count,
     }
 
 

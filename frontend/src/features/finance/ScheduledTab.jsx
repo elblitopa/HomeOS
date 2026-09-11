@@ -4,7 +4,8 @@ import Button from "../../components/ui/Button.jsx";
 import Comprobante from "../../components/ui/Comprobante.jsx";
 import TipoBadge from "../../components/ui/TipoBadge.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import { fmtMoney, formatDateTime } from "../../lib/constants.js";
+import { formatDateTime } from "../../lib/constants.js";
+import { usePrivacidad } from "./privacidad.jsx";
 import { AplazarModal, ConcretarModal, TransactionModal } from "./FinanceModals.jsx";
 
 const VISTAS = [
@@ -25,6 +26,7 @@ function textoVencimiento(item) {
 }
 
 export default function ScheduledTab({ accounts, categories, contexts, contextsById, reload, version }) {
+  const { money } = usePrivacidad();
   const [vista, setVista] = useState("pendiente");
   const [items, setItems] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -70,7 +72,7 @@ export default function ScheduledTab({ accounts, categories, contexts, contextsB
   };
 
   const monto = (item) => {
-    const texto = fmtMoney(item.actual_amount ?? item.amount, item.currency);
+    const texto = money(item.actual_amount ?? item.amount, item.currency);
     if (item.type === "ingreso") return <span className="font-semibold text-ok">+{texto}</span>;
     if (item.type === "egreso") return <span className="font-semibold text-err">−{texto}</span>;
     return <span className="font-semibold text-accent">⇄ {texto}</span>;

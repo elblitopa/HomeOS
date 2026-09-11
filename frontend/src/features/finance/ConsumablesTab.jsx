@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../../api/client.js";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import { fmtMoney } from "../../lib/constants.js";
 import { ConsumableModal } from "./FinanceModals.jsx";
+import { usePrivacidad } from "./privacidad.jsx";
 
 /** Consumibles: artículos de compra recurrente (shampoo, creatina, café…).
  *  HomeOS observa las compras reales (egresos ligados por consumable_id) y
@@ -27,6 +27,7 @@ function estadoProxima(c) {
 }
 
 export default function ConsumablesTab({ reload, version }) {
+  const { money } = usePrivacidad();
   const [items, setItems] = useState([]);
   const [modal, setModal] = useState(null); // consumible a editar
   const [verArchivados, setVerArchivados] = useState(false);
@@ -65,7 +66,7 @@ export default function ConsumablesTab({ reload, version }) {
           {c.last_purchase_at ? (
             <>
               Última compra: {fecha(c.last_purchase_at)}
-              {c.last_amount != null ? ` · ${fmtMoney(c.last_amount)}` : ""}
+              {c.last_amount != null ? ` · ${money(c.last_amount)}` : ""}
             </>
           ) : (
             "Sin compras registradas todavía."

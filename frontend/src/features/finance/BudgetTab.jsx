@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { apiGet } from "../../api/client.js";
 import Button from "../../components/ui/Button.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
-import { BASE_CURRENCY, fmtMoney, PERIODS } from "../../lib/constants.js";
+import { BASE_CURRENCY, PERIODS } from "../../lib/constants.js";
+import { usePrivacidad } from "./privacidad.jsx";
 
 const KIND_ICON = {
   Suscripción: "🔁",
@@ -13,16 +14,18 @@ const KIND_ICON = {
 const periodLabel = (v) => PERIODS.find((p) => p.value === v)?.label || v;
 
 function Stat({ label, value, tone = "", hint }) {
+  const { money } = usePrivacidad();
   return (
     <GlassCard className="p-4">
       <p className="text-xs text-ink-soft">{label}</p>
-      <p className={`text-xl font-bold ${tone}`}>{fmtMoney(value)}</p>
+      <p className={`text-xl font-bold ${tone}`}>{money(value)}</p>
       {hint && <p className="mt-0.5 text-[11px] text-ink-soft">{hint}</p>}
     </GlassCard>
   );
 }
 
 export default function BudgetTab({ version }) {
+  const { money } = usePrivacidad();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -83,14 +86,14 @@ export default function BudgetTab({ version }) {
                     <span>
                       {KIND_ICON[kind]} {kind}
                     </span>
-                    <span>{fmtMoney(subtotal)}</span>
+                    <span>{money(subtotal)}</span>
                   </div>
                   {items.map((c, i) => (
                     <div key={`${kind}-${i}`} className="flex items-center gap-3 px-4 py-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{c.name}</p>
                         <p className="truncate text-xs text-ink-soft">
-                          {fmtMoney(c.amount, c.currency)}
+                          {money(c.amount, c.currency)}
                           {c.period !== "—" && ` · ${periodLabel(c.period)}`}
                           {c.account && ` · ${c.account}`}
                           {c.note && ` · ${c.note}`}
@@ -102,7 +105,7 @@ export default function BudgetTab({ version }) {
                         }`}
                         title="Equivalente mensual en MXN"
                       >
-                        {fmtMoney(c.monthly_mxn)}
+                        {money(c.monthly_mxn)}
                       </span>
                     </div>
                   ))}
@@ -111,7 +114,7 @@ export default function BudgetTab({ version }) {
             })}
             <div className="flex items-center justify-between px-4 py-3 font-semibold">
               <span>Total al mes</span>
-              <span className="text-err">{fmtMoney(t.commitments)}</span>
+              <span className="text-err">{money(t.commitments)}</span>
             </div>
           </GlassCard>
         )}
@@ -138,16 +141,16 @@ export default function BudgetTab({ version }) {
                   <span className="ml-1 text-xs text-ink-soft">({i.currency})</span>
                 )}
               </span>
-              <span className="w-28 text-right text-ink-soft">{fmtMoney(i.expected_mxn)}</span>
+              <span className="w-28 text-right text-ink-soft">{money(i.expected_mxn)}</span>
               <span className={`w-28 text-right font-medium ${i.actual_mxn > 0 ? "text-ok" : "text-ink-soft"}`}>
-                {fmtMoney(i.actual_mxn)}
+                {money(i.actual_mxn)}
               </span>
             </div>
           ))}
           <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 text-sm font-semibold">
             <span>Total</span>
-            <span className="w-28 text-right">{fmtMoney(t.expected_income)}</span>
-            <span className="w-28 text-right text-ok">{fmtMoney(t.actual_income)}</span>
+            <span className="w-28 text-right">{money(t.expected_income)}</span>
+            <span className="w-28 text-right text-ok">{money(t.actual_income)}</span>
           </div>
         </GlassCard>
       </section>

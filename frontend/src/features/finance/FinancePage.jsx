@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "../../api/client.js";
 import TopBar from "../../components/layout/TopBar.jsx";
 import useContexts from "../../hooks/useContexts.js";
+import { BotonPrivacidad, PrivacidadProvider } from "./privacidad.jsx";
 import ResumenTab from "./ResumenTab.jsx";
 import TransactionsTab from "./TransactionsTab.jsx";
 import ConsumablesTab from "./ConsumablesTab.jsx";
@@ -50,8 +51,11 @@ export default function FinancePage() {
   const shared = { accounts, categories, contexts, contextsById: byId, reload, version, goTab: setTab };
 
   return (
+    <PrivacidadProvider>
     <div className="p-4 md:p-8">
-      <TopBar title="Finanzas" />
+      <TopBar title="Finanzas">
+        <BotonPrivacidad />
+      </TopBar>
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1 rounded-2xl bg-ink/5 p-1">
@@ -94,5 +98,6 @@ export default function FinancePage() {
       {tab === "presupuesto" && <BudgetTab {...shared} />}
       {tab === "divisas" && <DivisasPanel {...shared} />}
     </div>
+    </PrivacidadProvider>
   );
 }
