@@ -1671,6 +1671,13 @@ def delete_budget_bucket(bucket_id: int, db: Session = Depends(get_db)):
     return {"deleted": True}
 
 
+@router.get("/upcoming")
+def finance_upcoming(days: int = 30, db: Session = Depends(get_db)):
+    """Próximos movimientos: cortes/pagos de tarjeta, suscripciones, deudas y
+    programados, ya combinados y ordenados por cercanía."""
+    return mensajes_finanzas.proximos_movimientos(db, min(max(days, 1), 120))
+
+
 @router.get("/alerts")
 def finance_alerts(db: Session = Depends(get_db)):
     """Alertas financieras vigentes (presupuestos y tarjetas). Es estado

@@ -15,7 +15,13 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from backend.models import Account
+from backend.models import (
+    Account,
+    BASE_CURRENCY,
+    RecurringPayment,
+    ScheduledTransaction,
+    Subscription,
+)
 from backend.services.presupuesto_pct import resumen_buckets
 from backend.services.tarjetas import es_tarjeta, fechas_tarjeta
 
@@ -87,4 +93,65 @@ def alertas(db: Session, hoy: date | None = None) -> list[dict]:
 
     orden = {"err": 0, "warn": 1, "info": 2}
     out.sort(key=lambda a: orden.get(a["nivel"], 3))
+    return out
+
+
+def proximos_movimientos(db: Session, dias: int = 30, hoy: date | None = None) -> list[dict]:
+    """Lo que viene en los próximos días, de TODAS las fuentes financieras:
+    cortes y pagos de tarjeta, suscripciones, deudas/cobros a plazos y
+    movimientos programados. Cada fila viene de una entidad distinta, así que
+    no hay duplicados por construcción; se ordena del más próximo al más
+    lejano. Es una vista derivada: no crea nada."""
+    hoy = hoy or date.today()
+    tope = hoy + timedelta(days=dias)
+    out: list[dict] = []
+
+    def add(tipo, icono, titulo, cuando: date, monto=None, currency=None, ref_id=None, extra=""):
+        if not (hoy <= cuando <= tope):
+            return
+        out.append({
+            "tipo": tipo,
+            "icono": icono,
+            "titulo": titulo,
+            "detalle": extra or None,
+            "amount": monto,
+            "currency": currency or BASE_CURRENCY,
+            "date": cuando.isoformat(),
+            "days_left": (cuando - hoy).days,
+            "ref_id": ref_id,
+        })
+
+    for acc in db.query(Account).filter(Account.kind == "credito").all():
+        if not es_tarjeta(acc):
+            continue
+        f = fechas_tarjeta(acc, hoy)
+        if f.get("statement_date"):
+            add("tarjeta_corte", "💳", acc.name,
+                date.fromisoformat(f["statement_date"]), ref_id=acc.id, extra="corte")
+        if f.get("payment_date"):
+            add("tarjeta_pago", "💰", acc.name,
+                date.fromisoformat(f["payment_date"]), ref_id=acc.id, extra="pago")
+
+    for s in db.query(Subscription).filter(Subscription.next_due.isnot(None)).all():
+        add("suscripcion", "📺", s.name, s.next_due.date(),
+            s.amount, s.currency, s.id)
+
+    deudas = db.query(RecurringPayment).filter(
+        RecurringPayment.next_due.isnot(None),
+        RecurringPayment.installments_paid < RecurringPayment.installments_total,
+    ).all()
+    for r in deudas:
+        cobro = (r.type or "egreso") == "ingreso"
+        add("pago", "📥" if cobro else "📆", r.name, r.next_due.date(),
+            r.installment_amount, r.currency, r.id,
+            "te abonan" if cobro else f"cuota {r.installments_paid + 1}/{r.installments_total}")
+
+    pendientes = db.query(ScheduledTransaction).filter(
+        ScheduledTransaction.status == "pendiente"
+    ).all()
+    for p in pendientes:
+        add("programado", "📤" if p.type != "ingreso" else "📥", p.description,
+            p.scheduled_for.date(), p.amount, p.currency, p.id, "por confirmar")
+
+    out.sort(key=lambda i: (i["date"], i["titulo"]))
     return out

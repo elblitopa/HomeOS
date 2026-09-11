@@ -35,6 +35,9 @@ export default function useInbox() {
   // (una entidad, muchas vistas — nunca un segundo fetch de /api/todos).
   const [proyectos, setProyectos] = useState(null);
   const [suscripciones, setSuscripciones] = useState(null);
+  // alertas financieras (presupuestos y tarjetas): estado calculado por el
+  // backend, sin persistencia — por eso no puede duplicarse ni hacer spam
+  const [alertasFinanzas, setAlertasFinanzas] = useState(null);
 
   const refresh = useCallback(() => {
     const hoy = new Date();
@@ -51,6 +54,7 @@ export default function useInbox() {
     pide("/api/routines", setRutinas);
     pide("/api/business/projects", setProyectos);
     pide("/api/finance/subscriptions", setSuscripciones);
+    pide("/api/finance/alerts", setAlertasFinanzas);
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -139,6 +143,7 @@ export default function useInbox() {
     tareas: tareas || [],
     proyectos: proyectos || [],
     suscripciones: suscripciones || [],
+    alertasFinanzas: alertasFinanzas || [],
     // solo mientras no ha contestado NADA, que son un par de milisegundos
     cargando: !agenda && !tareas && !programados && !rutinas,
     // el "no hay nada" solo se enseña cuando ya contestaron todas: si no,

@@ -121,7 +121,22 @@ function ChipPrioridad({ item }) {
   );
 }
 
-export default function AtencionSidebar({ tareas, proyectos, suscripciones, contextsById, onAbrirTarea }) {
+// tono por nivel de alerta financiera: mismos colores que el resto del panel
+const NIVEL_ALERTA = {
+  err: "text-err",
+  warn: "text-amber-600 dark:text-amber-500",
+  info: "text-ink-soft",
+};
+const MAX_ALERTAS_FINANZAS = 3;
+
+export default function AtencionSidebar({
+  tareas,
+  proyectos,
+  suscripciones,
+  alertasFinanzas = [],
+  contextsById,
+  onAbrirTarea,
+}) {
   const navigate = useNavigate();
   const atencion = rankAtencion(tareas, proyectos).slice(0, MAX_ATENCION);
   const proximasSubs = suscripciones
@@ -173,6 +188,26 @@ export default function AtencionSidebar({ tareas, proyectos, suscripciones, cont
                 </button>
               );
             })}
+          </div>
+        )}
+        {/* alertas financieras: mismo registro de verdad que Finanzas (el
+            endpoint calcula estado, nunca guarda eventos), aquí solo asoman */}
+        {alertasFinanzas.length > 0 && (
+          <div className="mt-3 border-t border-ink/5 pt-2.5">
+            <p className="mb-1.5 text-xs font-semibold text-ink-soft">💰 Finanzas</p>
+            <div className="flex flex-col gap-1.5">
+              {alertasFinanzas.slice(0, MAX_ALERTAS_FINANZAS).map((a) => (
+                <button
+                  key={a.key}
+                  onClick={() => navigate("/finanzas")}
+                  className={`text-left text-xs leading-snug transition hover:opacity-75 ${
+                    NIVEL_ALERTA[a.nivel] || "text-ink-soft"
+                  }`}
+                >
+                  {a.texto}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </GlassCard>

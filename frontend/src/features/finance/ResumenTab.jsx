@@ -55,6 +55,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
   const [rates, setRates] = useState([]);
   const [today, setToday] = useState({ ingresos: 0, egresos: 0 });
   const [programados, setProgramados] = useState([]);
+  const [proximos, setProximos] = useState([]);
   const [modal, setModal] = useState(null); // {type, data?}
 
   useEffect(() => {
@@ -64,6 +65,8 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
     apiGet("/api/finance/rates").then(setRates).catch(() => {});
     apiGet("/api/finance/summary").then((s) => setToday(s.today)).catch(() => {});
     apiGet("/api/finance/scheduled?status=pendiente").then(setProgramados).catch(() => {});
+    // todas las fuentes ya combinadas por el backend, del más próximo al más lejano
+    apiGet("/api/finance/upcoming").then(setProximos).catch(() => {});
   }, [version]);
 
   // en el resumen solo asoman los que ya tocan; el resto vive en su pestaña
@@ -289,6 +292,46 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
       {/* min-w-0: sin esto el carrusel de metas estira la columna del grid
           hasta el ancho de todas sus tarjetas y desborda la pantalla */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-2 lg:self-start">
+        {/* lo que viene: tarjetas, suscripciones, deudas y programados en una
+            sola lista, ya ordenada por el backend */}
+        {proximos.length > 0 && (
+          <GlassCard className="p-4">
+            <h2 className="mb-2 text-sm font-semibold text-ink-soft">📅 Próximos movimientos</h2>
+            <div className="flex flex-col gap-1.5">
+              {proximos.slice(0, 7).map((p) => (
+                <div
+                  key={`${p.tipo}-${p.ref_id}-${p.date}`}
+                  className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 backdrop-blur ${urgencia(
+                    p.days_left
+                  )}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {p.icono} {p.titulo}
+                    </p>
+                    <p className="truncate text-xs text-ink-soft">
+                      {p.amount != null ? `${money(p.amount, p.currency)}` : ""}
+                      {p.amount != null && p.detalle ? " · " : ""}
+                      {p.detalle || ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-ink-soft">
+                    {p.days_left === 0
+                      ? "⚠️ hoy"
+                      : p.days_left === 1
+                        ? "mañana"
+                        : `en ${p.days_left} días`}
+                  </span>
+                </div>
+              ))}
+              {proximos.length > 7 && (
+                <p className="text-center text-[11px] text-ink-soft">
+                  y {proximos.length - 7} más en los próximos 30 días
+                </p>
+              )}
+            </div>
+          </GlassCard>
+        )}
         {/* solo aparece cuando hay algo que atender hoy o vencido */}
         {porAtender.length > 0 && (
           <GlassCard className="p-4">

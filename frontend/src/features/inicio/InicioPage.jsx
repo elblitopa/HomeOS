@@ -101,6 +101,7 @@ export default function InicioPage() {
             tareas={inbox.tareas}
             proyectos={inbox.proyectos}
             suscripciones={inbox.suscripciones}
+            alertasFinanzas={inbox.alertasFinanzas}
             contextsById={byId}
             onAbrirTarea={detalle.abrir}
           />
