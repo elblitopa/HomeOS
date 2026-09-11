@@ -32,12 +32,13 @@ from backend.services import google_calendar as gcal
 from backend.services.dates import add_months, occurrences
 from backend.services.google_sync import sync_aparte
 from backend.services.saldos import goal_saved
+from backend.services.tarjetas import fecha_en_mes, fechas_tarjeta, ocurrencias_en_rango
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
 KINDS = [
     "evento", "google", "tarea", "suscripcion", "pago", "meta", "nota",
-    "programado", "agenda", "transaccion", "prestamo",
+    "programado", "agenda", "transaccion", "prestamo", "tarjeta",
 ]
 
 
@@ -222,6 +223,28 @@ def agenda(
                         {**extra, "continuacion": pasos > 0})
                 dia += timedelta(days=1)
                 pasos += 1
+
+    if "tarjeta" in wanted:
+        # cortes y limites de pago de tarjetas de credito: expansion virtual
+        # calculada desde statement_day/payment_day, como las suscripciones.
+        # Identidad = (kind, ref_id, date); en una fecha dada la tarjeta tiene
+        # corte O pago (si coinciden, el titulo los junta). Nada se persiste:
+        # cambiar el dia de corte mueve solo todas las fechas futuras.
+        tarjetas = db.query(Account).filter(Account.kind == "credito").all()
+        for acc in tarjetas:
+            dias = {}
+            if acc.statement_day:
+                for d in ocurrencias_en_rango(acc.statement_day, desde.date(), hasta.date()):
+                    dias.setdefault(d, []).append("corte")
+            if acc.payment_day:
+                for d in ocurrencias_en_rango(acc.payment_day, desde.date(), hasta.date()):
+                    dias.setdefault(d, []).append("pago")
+            for d, tipos in sorted(dias.items()):
+                titulo = " y ".join(
+                    f"{'💳 Corte' if t == 'corte' else '💰 Pago'}" for t in tipos
+                ) + f" · {acc.name}"
+                add("tarjeta", acc.id, titulo, datetime.combine(d, datetime.min.time()),
+                    "tarjeta de crédito", None, {"card_events": tipos})
 
     if "transaccion" in wanted:
         cuentas = {a.id: a for a in db.query(Account).all()}
@@ -831,7 +854,46 @@ def _detalle_prestamo(db: Session, ref_id: int, cuando: datetime | None) -> dict
     )
 
 
+def _detalle_tarjeta(db: Session, ref_id: int, cuando: datetime | None) -> dict | None:
+    acc = db.get(Account, ref_id)
+    if not acc or acc.kind != "credito":
+        return None
+    fechas = fechas_tarjeta(acc)
+    dia = cuando.date() if cuando else None
+
+    # que representa ESTA fecha: corte, pago o ambos (dia ajustado a fin de mes)
+    tipos = []
+    if dia:
+        if acc.statement_day and fecha_en_mes(dia.year, dia.month, acc.statement_day) == dia:
+            tipos.append("corte")
+        if acc.payment_day and fecha_en_mes(dia.year, dia.month, acc.payment_day) == dia:
+            tipos.append("pago")
+    titulo = (" y ".join(
+        "💳 Corte" if t == "corte" else "💰 Pago" for t in tipos
+    ) or "💳 Tarjeta") + f" · {acc.name}"
+
+    return _sobre(
+        "tarjeta", acc.id, titulo, cuando,
+        badges=[
+            _badge("Fecha calculada del día de corte/pago", "neutral"),
+            _badge("Esta fecha ya no es parte de la serie" if dia and not tipos else None, "err"),
+        ],
+        fields=[
+            _campo("Tarjeta", acc.name, hint=acc.bank or None, color=acc.color),
+            _campo("Día de corte", f"día {acc.statement_day}" if acc.statement_day else None),
+            _campo("Día límite de pago", f"día {acc.payment_day}" if acc.payment_day else None),
+            _campo("Próximo corte", fechas.get("statement_date") if fechas else None, "fecha"),
+            _campo("Próximo pago", fechas.get("payment_date") if fechas else None, "fecha"),
+            _campo("Límite de crédito", acc.credit_limit, "dinero",
+                   currency=acc.currency) if acc.credit_limit else None,
+        ],
+        actions=[{"id": "ver_en_finanzas", "label": "Ver en Finanzas", "tone": "ghost"}],
+        data={**acc.to_dict(), "card": fechas},
+    )
+
+
 RESOLVERS.update({
+    "tarjeta": _detalle_tarjeta,
     "evento": _detalle_evento,
     "nota": _detalle_nota,
     "meta": _detalle_meta,

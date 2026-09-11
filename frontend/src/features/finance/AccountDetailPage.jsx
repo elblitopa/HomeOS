@@ -7,6 +7,7 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import TipoBadge from "../../components/ui/TipoBadge.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import { BASE_CURRENCY, formatDateTime, kindOf } from "../../lib/constants.js";
+import FechasTarjeta from "./FechasTarjeta.jsx";
 import { AccountModal, TransactionModal } from "./FinanceModals.jsx";
 import { BotonPrivacidad, PrivacidadProvider, usePrivacidad } from "./privacidad.jsx";
 
@@ -170,6 +171,7 @@ function Detalle() {
               {acc.bank ? ` · ${acc.bank}` : ""} · {acc.currency}
               {acc.scope === "negocio" ? " · 💼 Negocio" : ""}
             </p>
+            <FechasTarjeta card={acc.card} className="mt-1.5" />
           </div>
           <div className="text-right">
             <p className="text-xs text-ink-soft">Saldo actual</p>

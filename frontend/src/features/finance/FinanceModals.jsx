@@ -177,7 +177,11 @@ export function AccountModal({ open, account, onClose, onSaved }) {
     color: account?.color || CONTEXT_COLORS[0],
     banner_path: account?.banner_path || null,
     is_default: account?.is_default || false,
+    statement_day: account?.statement_day ?? "",
+    payment_day: account?.payment_day ?? "",
+    credit_limit: account?.credit_limit ?? "",
   });
+  const esCredito = form.kind === "credito";
 
   const uploadBanner = async (e) => {
     const file = e.target.files?.[0];
@@ -195,6 +199,13 @@ export function AccountModal({ open, account, onClose, onSaved }) {
 
   const save = async () => {
     if (!form.name.trim()) return setError("Ponle nombre a la cuenta.");
+    const dia = (v) => (v === "" || v === null ? null : Number(v));
+    if (esCredito) {
+      for (const v of [dia(form.statement_day), dia(form.payment_day)]) {
+        if (v !== null && (!Number.isInteger(v) || v < 1 || v > 31))
+          return setError("Los días de corte y pago van del 1 al 31.");
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -204,6 +215,10 @@ export function AccountModal({ open, account, onClose, onSaved }) {
         bank: form.bank.trim() || null,
         initial_balance: Number(form.initial_balance) || 0,
         expected_income: Number(form.expected_income) || 0,
+        // solo tarjetas de crédito; el backend además los limpia si el tipo cambia
+        statement_day: esCredito ? dia(form.statement_day) : null,
+        payment_day: esCredito ? dia(form.payment_day) : null,
+        credit_limit: esCredito && Number(form.credit_limit) > 0 ? Number(form.credit_limit) : null,
       };
       if (account) await apiPut(`/api/finance/accounts/${account.id}`, payload);
       else await apiPost("/api/finance/accounts", payload);
@@ -297,6 +312,40 @@ export function AccountModal({ open, account, onClose, onSaved }) {
             </div>
           </div>
         </div>
+        {/* Fechas de la tarjeta: DÍAS del mes, no fechas fijas. Si el día no
+            existe en un mes (31 en febrero) se usa el último disponible. */}
+        {esCredito && (
+          <div className="flex flex-col gap-3 rounded-xl border border-glass-border bg-surface/50 p-3">
+            <p className="text-sm font-medium">💳 Fechas de la tarjeta</p>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="flex flex-col gap-1 text-sm font-medium">
+                Día de corte
+                <input type="number" inputMode="numeric" min="1" max="31" step="1"
+                       className={inputCls} value={form.statement_day}
+                       onChange={set("statement_day")} placeholder="15" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm font-medium">
+                Día límite de pago
+                <input type="number" inputMode="numeric" min="1" max="31" step="1"
+                       className={inputCls} value={form.payment_day}
+                       onChange={set("payment_day")} placeholder="5" />
+              </label>
+            </div>
+            <label className="flex flex-col gap-1 text-sm font-medium">
+              Límite de crédito (opcional)
+              <input type="number" inputMode="decimal" min="0" step="0.01"
+                     className={inputCls} value={form.credit_limit}
+                     onChange={set("credit_limit")} />
+            </label>
+            <p className="text-[11px] text-ink-soft">
+              Con corte y pago configurados, HomeOS pone las fechas en el calendario
+              (y en Google si el espejo está prendido) y avisa 7, 3 y 1 día antes y el
+              mismo día. Si el pago cae antes que el corte, se entiende que es del mes
+              siguiente (corte 15 → pago 5 del mes que sigue).
+            </p>
+          </div>
+        )}
+
         <label className="flex items-start gap-2 text-sm font-medium">
           <input
             type="checkbox"

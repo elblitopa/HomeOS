@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
 from backend.models import (
+    Account,
     Event,
     GoogleLink,
     Loan,
@@ -30,6 +31,7 @@ from backend.models import (
     get_setting,
 )
 from backend.services import google_calendar as gcal
+from backend.services.tarjetas import es_tarjeta, fechas_tarjeta
 
 log = logging.getLogger("homeos.google.sync")
 
@@ -150,6 +152,34 @@ def _deseado(db: Session) -> dict[tuple[str, int], dict]:
                 l.promised_date, None, True,
                 _pie(detalle, "Préstamo"), [AVISO_DIA_ANTERIOR],
             )
+
+        # tarjetas de credito: el PROXIMO corte y el PROXIMO pago de cada una,
+        # como eventos de dia completo. La identidad es estable por tarjeta
+        # (tarjeta_corte/tarjeta_pago + account_id), asi que cambiar el dia de
+        # corte ACTUALIZA el evento via fingerprint en vez de duplicarlo, y
+        # borrar la cuenta lo saca del set deseado (el reconciliador lo quita).
+        from datetime import datetime as _dt
+
+        for acc in db.query(Account).filter(Account.kind == "credito").all():
+            if not es_tarjeta(acc):
+                continue
+            fechas = fechas_tarjeta(acc)
+            if fechas.get("statement_date"):
+                corte = _dt.fromisoformat(fechas["statement_date"])
+                quiero[("tarjeta_corte", acc.id)] = _cuerpo(
+                    "tarjeta_corte", acc.id, f"💳 Corte · {acc.name}",
+                    corte, None, True,
+                    _pie(f"Día de corte {acc.statement_day}.", "Tarjeta de crédito"),
+                    [AVISO_DIA_ANTERIOR],
+                )
+            if fechas.get("payment_date"):
+                pago = _dt.fromisoformat(fechas["payment_date"])
+                quiero[("tarjeta_pago", acc.id)] = _cuerpo(
+                    "tarjeta_pago", acc.id, f"💰 Pago · {acc.name}",
+                    pago, None, True,
+                    _pie(f"Día límite de pago {acc.payment_day}.", "Tarjeta de crédito"),
+                    [AVISO_DIA_ANTERIOR],
+                )
 
         # ingresos y egresos programados que siguen sin confirmarse
         pendientes = db.query(ScheduledTransaction).filter(

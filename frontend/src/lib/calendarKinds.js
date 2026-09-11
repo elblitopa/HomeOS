@@ -15,6 +15,7 @@ export const KINDS = [
   { key: "pago", label: "Pagos", icon: "📆", color: "#e8590c", on: true },
   { key: "meta", label: "Metas", icon: "🎯", color: "#f59e0b", on: true },
   { key: "prestamo", label: "Préstamos", icon: "🤝", color: "#7048e8", on: true },
+  { key: "tarjeta", label: "Tarjetas", icon: "💳", color: "#0c8599", on: true },
   { key: "nota", label: "Notas", icon: "📝", color: "#6b6b70", on: true },
   { key: "programado", label: "Programados", icon: "🗓️", color: "#0b7285", on: true },
   // OJO: los filtros guardados de antes no incluyen kinds nuevos, asi que el

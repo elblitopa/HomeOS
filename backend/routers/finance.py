@@ -27,6 +27,7 @@ from backend.services.dates import add_months
 from backend.services.excel import build_budget_xlsx
 from backend.services.periodos import rango_periodo
 from backend.services.saldos import goal_saved
+from backend.services.tarjetas import fechas_tarjeta
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
@@ -106,6 +107,21 @@ class AccountPayload(BaseModel):
     banner_path: str | None = None
     sort_order: int = 0
     is_default: bool = False
+    # solo tarjetas de credito: DIA del mes (1-31), no fecha fija
+    statement_day: int | None = Field(default=None, ge=1, le=31)
+    payment_day: int | None = Field(default=None, ge=1, le=31)
+    credit_limit: float | None = Field(default=None, gt=0)
+
+
+def _normalizar_tarjeta(data: dict) -> dict:
+    """Los campos de tarjeta solo tienen sentido en cuentas de credito; en
+    cualquier otro tipo se guardan como NULL para no arrastrar basura si la
+    cuenta cambia de tipo despues."""
+    if data.get("kind") != "credito":
+        data["statement_day"] = None
+        data["payment_day"] = None
+        data["credit_limit"] = None
+    return data
 
 
 @router.get("/accounts")
@@ -123,6 +139,8 @@ def list_accounts(db: Session = Depends(get_db)):
                 "balance": balance,
                 "balance_mxn": round(balance * rate, 2),
                 "fx_rate": rate,
+                # proximo corte y pago, solo para tarjetas configuradas
+                "card": fechas_tarjeta(a),
             }
         )
     return out
@@ -133,7 +151,7 @@ def create_account(payload: AccountPayload, db: Session = Depends(get_db)):
     if payload.is_default:
         # predeterminada solo puede haber una: se apagan las demas
         db.query(Account).update({"is_default": 0})
-    acc = Account(**payload.model_dump())
+    acc = Account(**_normalizar_tarjeta(payload.model_dump()))
     db.add(acc)
     db.commit()
     return acc.to_dict()
@@ -162,7 +180,7 @@ def update_account(acc_id: int, payload: AccountPayload, db: Session = Depends(g
         raise HTTPException(404, "Cuenta no encontrada")
     if payload.is_default:
         db.query(Account).filter(Account.id != acc_id).update({"is_default": 0})
-    for key, value in payload.model_dump().items():
+    for key, value in _normalizar_tarjeta(payload.model_dump()).items():
         setattr(acc, key, value)
     db.commit()
     return acc.to_dict()
@@ -304,6 +322,7 @@ def account_detail(
             **acc.to_dict(),
             "balance": balance,
             "balance_mxn": round(balance * tasa_destino, 2),
+            "card": fechas_tarjeta(acc),
         },
         "period": {
             "key": period,

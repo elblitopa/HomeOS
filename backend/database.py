@@ -86,6 +86,11 @@ MIGRATIONS = [
     # consumibles: un egreso puede ser la compra de un articulo trackeado.
     # create_all corre antes que esto, asi que consumables ya existe.
     ("transactions", "consumable_id", "consumable_id INTEGER REFERENCES consumables(id) ON DELETE SET NULL"),
+    # tarjetas de credito: dia de corte y dia limite de pago (1-31, se ajusta
+    # al fin de mes) y limite opcional. NULL en cuentas que no son de credito.
+    ("accounts", "statement_day", "statement_day INTEGER"),
+    ("accounts", "payment_day", "payment_day INTEGER"),
+    ("accounts", "credit_limit", "credit_limit FLOAT"),
 ]
 
 # Columnas que dejaron de usarse (en SQLite necesita 3.35+, incluido en Python 3.11)

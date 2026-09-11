@@ -69,6 +69,13 @@ class Account(Base):
     # la que sale preseleccionada al registrar un movimiento; solo puede
     # haber una, el router se encarga de apagar las demas
     is_default: Mapped[int] = mapped_column(Integer, default=0)
+    # solo tarjetas de credito (kind == "credito"): DIA del mes (1-31), no una
+    # fecha fija. Si el dia no existe en un mes (31 en febrero) se usa el
+    # ultimo dia disponible. Las cuentas normales los dejan en NULL y todo
+    # sigue funcionando exactamente igual que antes.
+    statement_day: Mapped[int | None] = mapped_column(Integer, nullable=True)  # corte
+    payment_day: Mapped[int | None] = mapped_column(Integer, nullable=True)    # limite de pago
+    credit_limit: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self) -> dict:
@@ -85,6 +92,9 @@ class Account(Base):
             "banner_path": self.banner_path,
             "sort_order": self.sort_order,
             "is_default": bool(self.is_default),
+            "statement_day": self.statement_day,
+            "payment_day": self.payment_day,
+            "credit_limit": self.credit_limit,
         }
 
 

@@ -8,6 +8,7 @@ import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { COLOR_TIPO, IconoTipo } from "../../components/ui/TipoBadge.jsx";
 import { BASE_CURRENCY, kindOf, PERIODS } from "../../lib/constants.js";
+import FechasTarjeta from "./FechasTarjeta.jsx";
 import { usePrivacidad } from "./privacidad.jsx";
 import {
   AccountModal,
@@ -272,6 +273,7 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                             {a.bank ? `${a.bank} · ` : ""}
                             {a.currency}
                           </p>
+                          <FechasTarjeta card={a.card} className="mt-1.5" />
                         </div>
                       </GlassCard>
                     ))}

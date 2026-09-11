@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from backend.database import SessionLocal
 from backend.models import (
+    Account,
     Event,
     RecurringPayment,
     ScheduledTransaction,
@@ -19,6 +20,7 @@ from backend.models import (
 from backend.notifications.discord import send_webhook
 from backend.services import google_sync
 from backend.services.fx import refresh_rates
+from backend.services.tarjetas import AVISOS_DIAS, es_tarjeta, fechas_tarjeta
 
 log = logging.getLogger("homeos.scheduler")
 
@@ -117,6 +119,7 @@ def process_reminders() -> int:
 
         sent += _process_payment_notices(db, url, now)
         sent += _process_scheduled_notices(db, url, now)
+        sent += _process_card_notices(db, url, now)
     return sent
 
 
@@ -161,6 +164,41 @@ def _process_payment_notices(db, url: str, now: datetime) -> int:
             msg = f"{icono} {label} **{item.name}** — ${amount:,.2f} {when} ({item.next_due.strftime('%d/%m')})"
             if send_webhook(msg, url):
                 _mark_sent(db, kind, item.id, key)
+                sent += 1
+    return sent
+
+
+def _process_card_notices(db, url: str, now: datetime) -> int:
+    """Cortes y limites de pago de tarjetas: avisa a 7, 3 y 1 dia, y el dia.
+
+    Las fechas son calculadas (no persisten), asi que el dedup usa la misma
+    clave con fecha que los pagos: si el usuario cambia el dia de corte, la
+    fecha nueva genera avisos propios sin repetir los ya enviados.
+    """
+    sent = 0
+    today = now.date()
+    for acc in db.query(Account).filter(Account.kind == "credito").all():
+        if not es_tarjeta(acc):
+            continue
+        fechas = fechas_tarjeta(acc, today)
+        eventos = []
+        if fechas.get("statement_date"):
+            eventos.append(("card_statement", "💳 Corte", fechas["statement_date"],
+                            fechas["statement_days_left"]))
+        if fechas.get("payment_date"):
+            eventos.append(("card_payment", "💰 Pago", fechas["payment_date"],
+                            fechas["payment_days_left"]))
+        for kind, etiqueta, fecha_iso, dias in eventos:
+            if dias not in AVISOS_DIAS:
+                continue
+            cuando = datetime.fromisoformat(fecha_iso)
+            key = _payment_key(cuando, dias)
+            if _already_sent(db, kind, acc.id, key):
+                continue
+            texto = "es HOY" if dias == 0 else ("es mañana" if dias == 1 else f"en {dias} días")
+            msg = f"{etiqueta} de **{acc.name}** {texto} ({cuando.strftime('%d/%m')})"
+            if send_webhook(msg, url):
+                _mark_sent(db, kind, acc.id, key)
                 sent += 1
     return sent
 
