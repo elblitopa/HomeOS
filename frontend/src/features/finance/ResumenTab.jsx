@@ -8,6 +8,7 @@ import { miniatura } from "../../components/ui/Comprobante.jsx";
 import GlassCard from "../../components/ui/GlassCard.jsx";
 import { COLOR_TIPO, IconoTipo } from "../../components/ui/TipoBadge.jsx";
 import { BASE_CURRENCY, kindOf, PERIODS } from "../../lib/constants.js";
+import CreditoUtilizacion from "./CreditoUtilizacion.jsx";
 import FechasTarjeta from "./FechasTarjeta.jsx";
 import { usePrivacidad } from "./privacidad.jsx";
 import {
@@ -266,11 +267,30 @@ export default function ResumenTab({ accounts, categories, contexts, reload, ver
                               {section.key === "negocio" ? kindOf(a.kind).label : a.scope}
                             </span>
                           </div>
-                          <p className="text-xl font-bold">{money(a.balance, a.currency)}</p>
-                          {a.currency !== BASE_CURRENCY && (
-                            <p className="text-xs font-medium text-accent">
-                              ≈ {money(a.balance_mxn)} MXN
-                            </p>
+                          {/* crédito: la cifra grande es la DEUDA (el balance
+                              negativo confunde); lo demás lo dice la barra */}
+                          {a.kind === "credito" && a.card ? (
+                            <>
+                              <p className="text-xs text-ink-soft">
+                                {a.card.credit_balance > 0 ? "Saldo a favor" : "Deuda actual"}
+                              </p>
+                              <p className="text-xl font-bold">
+                                {money(
+                                  a.card.credit_balance > 0 ? a.card.credit_balance : a.card.used,
+                                  a.currency
+                                )}
+                              </p>
+                              <CreditoUtilizacion card={a.card} compact currency={a.currency} />
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xl font-bold">{money(a.balance, a.currency)}</p>
+                              {a.currency !== BASE_CURRENCY && (
+                                <p className="text-xs font-medium text-accent">
+                                  ≈ {money(a.balance_mxn)} MXN
+                                </p>
+                              )}
+                            </>
                           )}
                           <p className="text-xs text-ink-soft">
                             {a.bank ? `${a.bank} · ` : ""}

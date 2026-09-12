@@ -30,7 +30,7 @@ from backend.services.dates import add_months
 from backend.services.excel import build_budget_xlsx
 from backend.services.periodos import rango_periodo
 from backend.services.saldos import goal_saved
-from backend.services.tarjetas import fechas_tarjeta
+from backend.services.tarjetas import tarjeta_info
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
@@ -142,8 +142,8 @@ def list_accounts(db: Session = Depends(get_db)):
                 "balance": balance,
                 "balance_mxn": round(balance * rate, 2),
                 "fx_rate": rate,
-                # proximo corte y pago, solo para tarjetas configuradas
-                "card": fechas_tarjeta(a),
+                # tarjetas de credito: fechas + utilizacion, calculado central
+                "card": tarjeta_info(a, balance),
             }
         )
     return out
@@ -325,7 +325,7 @@ def account_detail(
             **acc.to_dict(),
             "balance": balance,
             "balance_mxn": round(balance * tasa_destino, 2),
-            "card": fechas_tarjeta(acc),
+            "card": tarjeta_info(acc, balance),
         },
         "period": {
             "key": period,

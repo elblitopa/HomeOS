@@ -22,6 +22,22 @@ from backend.models import Account
 # los usa el scheduler de Discord). Configurables a futuro via Ajustes.
 AVISOS_DIAS = (7, 3, 1, 0)
 
+# niveles de utilizacion del credito (fraccion del limite), centralizados:
+# el frontend solo pinta el estado que llega, nunca recalcula umbrales
+UTILIZACION_NIVELES = (
+    (0.30, "normal"),
+    (0.50, "info"),
+    (0.80, "advertencia"),
+    (1.00, "alta"),
+)
+
+
+def nivel_utilizacion(fraccion: float) -> str:
+    for tope, nombre in UTILIZACION_NIVELES:
+        if fraccion < tope:
+            return nombre
+    return "excedido"  # >= 100%: al limite o pasado (over_limit dice cuanto)
+
 
 def fecha_en_mes(year: int, month: int, day: int) -> date:
     """El dia pedido dentro de ese mes, ajustado al ultimo dia si no existe."""
@@ -91,6 +107,54 @@ def fechas_tarjeta(acc: Account, hoy: date | None = None) -> dict | None:
         "payment_date": pago.isoformat() if pago else None,
         "payment_days_left": (pago - hoy).days if pago else None,
     }
+
+
+def metricas_credito(acc: Account, balance: float) -> dict | None:
+    """Utilizacion del credito derivada del saldo REAL que ya calcula HomeOS.
+
+    Convencion del motor de saldos (una sola formula para toda cuenta):
+    los gastos con la tarjeta son egresos que RESTAN, asi que la deuda vive
+    como balance NEGATIVO y pagar la tarjeta (transferencia entrante) acerca
+    a 0. De ahi: deuda = max(0, -balance) y saldo a favor = max(0, balance).
+    Nada se persiste y ningun signo historico cambia.
+    """
+    if acc.kind != "credito":
+        return None
+    usado = round(max(0.0, -balance), 2)
+    a_favor = round(max(0.0, balance), 2)
+    # limite 0 o NULL = no configurado: sin division entre cero, sin %
+    limite = acc.credit_limit if (acc.credit_limit or 0) > 0 else None
+    out = {
+        "credit_limit": limite,
+        "used": usado,
+        "credit_balance": a_favor,  # saldo a favor (pagaste de mas)
+        "available": None,
+        "over_limit": None,
+        "utilization_percent": None,
+        "utilization_state": None,
+    }
+    if limite:
+        out["available"] = round(max(0.0, limite - usado), 2)
+        out["over_limit"] = round(max(0.0, usado - limite), 2)
+        out["utilization_percent"] = round(usado / limite * 100, 1)  # nunca negativo
+        out["utilization_state"] = nivel_utilizacion(usado / limite)
+    return out
+
+
+def tarjeta_info(acc: Account, balance: float = 0.0) -> dict | None:
+    """El objeto `card` completo de una cuenta de credito: fechas + metricas.
+
+    A diferencia de fechas_tarjeta (que exige dias configurados porque
+    alimenta calendario/Google/avisos), aqui basta con que la cuenta sea de
+    credito: una tarjeta sin corte configurado igual muestra su utilizacion.
+    """
+    if acc.kind != "credito":
+        return None
+    fechas = fechas_tarjeta(acc) or {
+        "statement_date": None, "statement_days_left": None,
+        "payment_date": None, "payment_days_left": None,
+    }
+    return {**fechas, **metricas_credito(acc, balance)}
 
 
 def ocurrencias_en_rango(day: int, desde: date, hasta: date, limit: int = 40) -> list[date]:

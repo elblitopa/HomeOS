@@ -7,6 +7,7 @@ import GlassCard from "../../components/ui/GlassCard.jsx";
 import TipoBadge from "../../components/ui/TipoBadge.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import { BASE_CURRENCY, formatDateTime, kindOf } from "../../lib/constants.js";
+import CreditoUtilizacion from "./CreditoUtilizacion.jsx";
 import FechasTarjeta from "./FechasTarjeta.jsx";
 import { AccountModal, TransactionModal } from "./FinanceModals.jsx";
 import { BotonPrivacidad, PrivacidadProvider, usePrivacidad } from "./privacidad.jsx";
@@ -219,6 +220,15 @@ function Detalle() {
           ))}
         </select>
       </div>
+
+      {/* crédito: límite, utilizado, disponible y utilización — todo lo
+          calcula el backend en account.card */}
+      {acc.kind === "credito" && acc.card && (
+        <GlassCard className="p-4">
+          <h2 className="mb-2 text-sm font-semibold text-ink-soft">💳 Crédito</h2>
+          <CreditoUtilizacion card={acc.card} currency={acc.currency} />
+        </GlassCard>
+      )}
 
       {/* resumen del periodo (las transferencias van aparte a propósito) */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">

@@ -172,7 +172,13 @@ export function AccountModal({ open, account, onClose, onSaved }) {
     scope: account?.scope || "personal",
     bank: account?.bank || "",
     currency: account?.currency || "MXN",
-    initial_balance: account?.initial_balance ?? 0,
+    // convención del motor: en crédito la deuda vive como balance NEGATIVO.
+    // El usuario captura "cuánto debe" en positivo; el signo se mapea al
+    // guardar y se desmapea al editar. Solo UX, cero cambios de motor.
+    initial_balance:
+      account?.kind === "credito"
+        ? Math.abs(account?.initial_balance ?? 0)
+        : (account?.initial_balance ?? 0),
     expected_income: account?.expected_income ?? 0,
     color: account?.color || CONTEXT_COLORS[0],
     banner_path: account?.banner_path || null,
@@ -213,7 +219,10 @@ export function AccountModal({ open, account, onClose, onSaved }) {
         ...form,
         name: form.name.trim(),
         bank: form.bank.trim() || null,
-        initial_balance: Number(form.initial_balance) || 0,
+        // crédito: lo capturado es deuda -> se guarda negativo (o 0)
+        initial_balance: esCredito
+          ? -Math.abs(Number(form.initial_balance) || 0) || 0
+          : Number(form.initial_balance) || 0,
         expected_income: Number(form.expected_income) || 0,
         // solo tarjetas de crédito; el backend además los limpia si el tipo cambia
         statement_day: esCredito ? dia(form.statement_day) : null,
@@ -279,8 +288,14 @@ export function AccountModal({ open, account, onClose, onSaved }) {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Saldo inicial
-            <input type="number" inputMode="decimal" step="0.01" className={inputCls} value={form.initial_balance} onChange={set("initial_balance")} />
+            {esCredito ? "Saldo adeudado inicial" : "Saldo inicial"}
+            <input type="number" inputMode="decimal" step="0.01" min={esCredito ? "0" : undefined} className={inputCls} value={form.initial_balance} onChange={set("initial_balance")} />
+            {esCredito && (
+              <span className="text-[11px] font-normal text-ink-soft">
+                Ingresa cuánto debes actualmente en esta tarjeta al momento de
+                registrarla. Si no debes nada, coloca $0.
+              </span>
+            )}
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
             Ingreso esperado al mes

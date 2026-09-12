@@ -140,6 +140,19 @@ Suscripciones, y Actividades agregadas en /negocios).
     propio); las transferencias recibidas salen en el historial (mueven
     saldo) convertidas con la misma aritmética que _account_balances.
     Paginación limit/offset + total_count.
+  - **Utilización de crédito** (rama `feature/credit-utilization`): la deuda
+    de una tarjeta vive como **balance NEGATIVO** (los gastos son egresos que
+    restan; pagarla es una transferencia entrante) — deuda = max(0, −balance)
+    y saldo a favor = max(0, balance). El modal captura "Saldo adeudado
+    inicial" en positivo y mapea el signo (solo UX, el motor no cambia).
+    `services/tarjetas.py` centraliza `metricas_credito` (used/available/
+    over_limit/%/estado con umbrales 30/50/80/100 en UTILIZACION_NIVELES) y
+    `tarjeta_info` arma el `card` completo (fechas + métricas) que viaja en
+    /accounts y en el detalle; el frontend solo pinta
+    (`CreditoUtilizacion.jsx`, compacto en la tarjeta y completo en el
+    detalle). Límite NULL o 0 = "Límite no configurado", sin divisiones ni
+    %; el % queda visible con privacidad activa (no revela montos). Cero
+    cambios de schema.
   - **Tarjetas de crédito**: `accounts.statement_day/payment_day/credit_limit`
     (MIGRATIONS; NULL en cuentas normales y se limpian si el tipo deja de ser
     credito). TODO se deriva en `services/tarjetas.py`: día inexistente → fin
