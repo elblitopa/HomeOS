@@ -175,10 +175,27 @@ function Detalle() {
             <FechasTarjeta card={acc.card} className="mt-1.5" />
           </div>
           <div className="text-right">
-            <p className="text-xs text-ink-soft">Saldo actual</p>
-            <p className="text-2xl font-bold">{money(acc.balance, acc.currency)}</p>
-            {acc.currency !== BASE_CURRENCY && (
-              <p className="text-xs font-medium text-accent">≈ {money(acc.balance_mxn)} MXN</p>
+            {/* crédito: nunca el balance negativo crudo — se lee como deuda */}
+            {acc.kind === "credito" && acc.card ? (
+              <>
+                <p className="text-xs text-ink-soft">
+                  {acc.card.credit_balance > 0 ? "Saldo a favor" : "Deuda actual"}
+                </p>
+                <p className="text-2xl font-bold">
+                  {money(
+                    acc.card.credit_balance > 0 ? acc.card.credit_balance : acc.card.used,
+                    acc.currency
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-ink-soft">Saldo actual</p>
+                <p className="text-2xl font-bold">{money(acc.balance, acc.currency)}</p>
+                {acc.currency !== BASE_CURRENCY && (
+                  <p className="text-xs font-medium text-accent">≈ {money(acc.balance_mxn)} MXN</p>
+                )}
+              </>
             )}
           </div>
           <button

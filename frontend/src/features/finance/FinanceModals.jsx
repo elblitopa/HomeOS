@@ -19,6 +19,15 @@ import { miniatura } from "../../components/ui/Comprobante.jsx";
 
 const selectCls = inputCls;
 
+/** Cómo se lee el saldo de una cuenta en un selector: una tarjeta con deuda
+ *  jamás debe aparecer como "-$12,500"; se dice "deuda $12,500". */
+function saldoLegible(a) {
+  if (a.kind === "credito" && (a.balance ?? 0) < 0) {
+    return `deuda ${fmtMoney(-a.balance, a.currency)}`;
+  }
+  return fmtMoney(a.balance ?? 0, a.currency);
+}
+
 /** Selector de divisa: solo las que ya existen en la pestaña Divisas,
  *  porque son las únicas que se pueden convertir a MXN. */
 function CurrencySelect({ value, onChange, rates }) {
@@ -1658,7 +1667,7 @@ export function AjusteModal({ open, accounts, onClose, onSaved }) {
           <select className={selectCls} value={form.account_id} onChange={set("account_id")}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name} — {fmtMoney(a.balance ?? 0, a.currency)}
+                {a.name} — {saldoLegible(a)}
               </option>
             ))}
           </select>
@@ -1781,7 +1790,7 @@ export function LoanModal({ open, loan, accounts, onClose, onSaved }) {
               <select className={selectCls} value={form.account_id} onChange={set("account_id")}>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} — {fmtMoney(a.balance ?? 0, a.currency)}
+                    {a.name} — {saldoLegible(a)}
                   </option>
                 ))}
               </select>
