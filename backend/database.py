@@ -91,6 +91,9 @@ MIGRATIONS = [
     ("accounts", "statement_day", "statement_day INTEGER"),
     ("accounts", "payment_day", "payment_day INTEGER"),
     ("accounts", "credit_limit", "credit_limit FLOAT"),
+    # conciliaciones (Actualizar saldo/deuda): mueven el balance pero no son
+    # actividad real. Las filas previas quedan en 0 = movimiento real.
+    ("transactions", "is_adjustment", "is_adjustment BOOLEAN DEFAULT 0"),
 ]
 
 # Columnas que dejaron de usarse (en SQLite necesita 3.35+, incluido en Python 3.11)

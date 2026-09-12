@@ -288,7 +288,14 @@ function Detalle() {
                 <TipoBadge type={tx.type} />
                 {cat && <span className="text-lg">{cat.icon}</span>}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{tx.description}</p>
+                  <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                    <span className="truncate">{tx.description}</span>
+                    {tx.is_adjustment && (
+                      <span className="shrink-0 rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-medium text-ink-soft">
+                        Ajuste
+                      </span>
+                    )}
+                  </p>
                   <p className="truncate text-xs text-ink-soft">
                     {formatDateTime(tx.occurred_at)}
                     {origen ? ` · recibida de ${origen.name}` : ""}
@@ -301,7 +308,11 @@ function Detalle() {
                 {tx.attachment_path && (
                   <Comprobante path={tx.attachment_path} name={tx.attachment_name} />
                 )}
-                {tx.type === "ingreso" || tx.incoming ? (
+                {tx.is_adjustment ? (
+                  <span className="font-semibold text-ink-soft">
+                    {tx.type === "ingreso" ? "+" : "−"}{money(monto, acc.currency)}
+                  </span>
+                ) : tx.type === "ingreso" || tx.incoming ? (
                   <span className="font-semibold text-ok">+{money(monto, acc.currency)}</span>
                 ) : tx.type === "egreso" ? (
                   <span className="font-semibold text-err">−{money(monto, acc.currency)}</span>

@@ -140,6 +140,18 @@ Suscripciones, y Actividades agregadas en /negocios).
     propio); las transferencias recibidas salen en el historial (mueven
     saldo) convertidas con la misma aritmética que _account_balances.
     Paginación limit/offset + total_count.
+  - **MOVIMIENTO REAL vs CONCILIACIÓN** (`transactions.is_adjustment`, en
+    MIGRATIONS): un ajuste de "Actualizar saldo/deuda" usa type
+    ingreso/egreso SOLO para mover el balance; NO es actividad financiera.
+    Regla de oro: BALANCE = reales + conciliaciones (jamás filtrar);
+    ACTIVIDAD (ingresos, egresos, flujo, resúmenes, presupuestos, %,
+    alertas) = solo reales → toda métrica nueva que agregue montos por type
+    DEBE filtrar con `actividad_real()` (models/finance.py, criterio
+    central). Los filtros Ingresos/Egresos del historial excluyen ajustes;
+    "Todos" los muestra con badge "Ajuste" y monto en neutro. El endpoint
+    /adjust marca el flag; nada depende del texto de la descripción. En
+    tarjetas, /adjust acepta `current_debt` (deuda en positivo; la
+    traducción de signo vive en la API) además de `real_balance` (compat).
   - **Utilización de crédito** (rama `feature/credit-utilization`): la deuda
     de una tarjeta vive como **balance NEGATIVO** (los gastos son egresos que
     restan; pagarla es una transferencia entrante) — deuda = max(0, −balance)

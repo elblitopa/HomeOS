@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import (
     Account,
+    actividad_real,
     BASE_CURRENCY,
     BudgetBucket,
     BudgetBucketAccount,
@@ -234,6 +235,10 @@ def adjust_account(acc_id: int, payload: AdjustPayload, db: Session = Depends(ge
         account_id=acc_id,
         occurred_at=datetime.now(),
         fx_rate=fx.current_rate(db, acc.currency),
+        # marca ESTRUCTURAL de conciliación: mueve el balance pero queda
+        # fuera de toda métrica de actividad (la descripción es solo para
+        # humanos, nada depende de su texto)
+        is_adjustment=True,
     )
     db.add(tx)
     db.commit()
@@ -281,9 +286,11 @@ def account_detail(
         return q
 
     # ---- métricas (en la divisa de la cuenta) ----
+    # actividad real: las conciliaciones mueven el saldo pero no son
+    # ingreso/gasto — el balance de abajo sí las incluye, como debe
     qt = en_rango(
         db.query(Transaction.type, func.sum(Transaction.amount))
-        .filter(Transaction.account_id == acc_id)
+        .filter(Transaction.account_id == acc_id, actividad_real())
     )
     if category_id:
         qt = qt.filter(Transaction.category_id == category_id)
@@ -315,7 +322,9 @@ def account_detail(
     if type == "transferencia":
         cond = (Transaction.type == "transferencia") & (propio | recibido)
     elif type:
-        cond = (Transaction.type == type) & propio
+        # el filtro Ingresos/Egresos es de movimientos REALES; los ajustes
+        # solo se ven en "Todos", donde llevan su etiqueta de conciliación
+        cond = (Transaction.type == type) & propio & actividad_real()
     else:
         cond = propio | recibido
     qh = en_rango(db.query(Transaction).filter(cond))
@@ -450,6 +459,10 @@ def list_transactions(
         q = q.filter(Transaction.occurred_at < hasta)
     if type:
         q = q.filter(Transaction.type == type)
+        if type in ("ingreso", "egreso"):
+            # Ingresos/Egresos = solo movimientos reales; los ajustes de
+            # conciliación viven en "Todos" con su etiqueta
+            q = q.filter(actividad_real())
     if account_id:
         q = q.filter(Transaction.account_id == account_id)
     if category_id:
@@ -1534,6 +1547,7 @@ def _budget_data(db: Session) -> dict:
         )
         .filter(
             Transaction.type == "ingreso",
+            actividad_real(),  # un ajuste de conciliación no es dinero recibido
             Transaction.occurred_at >= start,
             Transaction.occurred_at < _add_months(start, 1),
         )
@@ -1740,11 +1754,12 @@ def finance_alerts(db: Session = Depends(get_db)):
 @router.get("/summary")
 def summary(context_id: int | None = None, db: Session = Depends(get_db)):
     """Totales por categoría, por mes y del día (excluye transferencias)."""
+    # las tres consultas del resumen son de ACTIVIDAD: fuera conciliaciones
     q = db.query(
         Transaction.category_id,
         Transaction.type,
         func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
-    ).filter(Transaction.type.in_(["ingreso", "egreso"]))
+    ).filter(Transaction.type.in_(["ingreso", "egreso"]), actividad_real())
     if context_id:
         q = q.filter(Transaction.context_id == context_id)
     by_category: dict = {}
@@ -1757,7 +1772,7 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
         mes,
         Transaction.type,
         func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
-    ).filter(Transaction.type.in_(["ingreso", "egreso"]))
+    ).filter(Transaction.type.in_(["ingreso", "egreso"]), actividad_real())
     if context_id:
         qm = qm.filter(Transaction.context_id == context_id)
     by_month: dict = {}
@@ -1771,6 +1786,7 @@ def summary(context_id: int | None = None, db: Session = Depends(get_db)):
         func.sum(Transaction.amount * func.coalesce(Transaction.fx_rate, 1.0)),
     ).filter(
         Transaction.type.in_(["ingreso", "egreso"]),
+        actividad_real(),
         Transaction.occurred_at >= start_today,
         # con cota superior: sin ella, cualquier movimiento con fecha futura
         # se contaria como si hubiera pasado hoy
