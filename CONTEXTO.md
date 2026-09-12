@@ -45,7 +45,7 @@ Suscripciones, y Actividades agregadas en /negocios).
 | Apps (`/apps`) | Lanza los 5 proyectos, start/stop del .bat, estado por puerto |
 | Calendario | Vista Mes y Día. Junta eventos, Google, tareas, suscripciones, pagos, metas, notas, programados y transacciones. Click en cualquier bloque abre su detalle |
 | Tareas | Prioridades, contextos, fecha límite, timeline de notas y archivos |
-| Finanzas | Resumen, Transacciones, **Consumibles**, **Programados**, Metas, Préstamos, Categorías, Mensual, Presupuesto, y Divisas aparte |
+| Finanzas | Resumen (con **Próximos movimientos**), Transacciones, **Consumibles**, **Programados**, Metas, Préstamos, Categorías, Mensual, Presupuesto (con **Distribución de ingresos**), y Divisas aparte. Ojo 👁 de **privacidad** en la cabecera y **detalle por cuenta** en `/finanzas/cuentas/:id` |
 | **Negocios** (`/negocios`) | Tarjetas con banner, una por negocio, + **Actividades pendientes** (vista agregada de los proyectos de TODOS los negocios: Lista/Calendario y filtro por negocio) → detalle (en tabs o tarjetas con banner por sección) con Proyectos (Tabla/Tablero/Calendario), **Agenda** (eventos de clientes, opcional por negocio), Proveedores, Pagos, CRM, Contenido, Competidores, Mensajes, Documentos y Manual |
 | Rutinas | Checklist por día (se puede palomear cualquier fecha pasada), matriz semanal clicable, gráfica de 30 días |
 | Notas / Archivos / Ajustes | Texto y voz · biblioteca con previews · Google, semana, Discord, contextos, nombre y frases |
@@ -124,6 +124,49 @@ Suscripciones, y Actividades agregadas en /negocios).
   borrar. Movibles con drag conservando duración. La grilla mensual chica es
   `components/ui/MonthGrid.jsx`, compartida por Proyectos y Agenda (la de
   CalendarPage sigue aparte a propósito: es monolítica).
+- **Finance v2 (rama `feature/finance-v2` — SIN fusionar A PROPÓSITO, espera
+  aprobación explícita de Pablo; NO aplicar aquí la regla de "fusionar toda
+  rama pendiente")**:
+  - **Privacidad**: el ojo de Finanzas es una preferencia POR DISPOSITIVO en
+    localStorage (`homeos-finanzas-privacidad`), jamás en la base. Una sola
+    fuente de verdad: `features/finance/privacidad.jsx` (provider + hook
+    `usePrivacidad().money()` que reemplaza a fmtMoney en las vistas). Los
+    modales de edición NO se enmascaran a propósito (editar exige ver); las
+    Divisas tampoco (tipos de cambio públicos). Es cortina visual, no cifrado.
+  - **Detalle de cuenta**: `GET /api/finance/accounts/{id}/detail` con
+    `period=hoy|semana|mes|ano|todo|custom` (rangos centralizados en
+    `services/periodos.py`, [inicio, fin), semana según week_starts_on).
+    Ingresos/egresos/flujo neto EXCLUYEN transferencias (ya son un type
+    propio); las transferencias recibidas salen en el historial (mueven
+    saldo) convertidas con la misma aritmética que _account_balances.
+    Paginación limit/offset + total_count.
+  - **Tarjetas de crédito**: `accounts.statement_day/payment_day/credit_limit`
+    (MIGRATIONS; NULL en cuentas normales y se limpian si el tipo deja de ser
+    credito). TODO se deriva en `services/tarjetas.py`: día inexistente → fin
+    de mes (31/feb → 28-29), y el pago pertenece al corte ANTERIOR (corte 15 +
+    pago 5 → el corte de sep se paga el 5 de oct). Calendario: kind
+    `tarjeta` (expansión virtual, identidad (kind, ref_id, date), color
+    #0c8599 — chip nuevo: filtros guardados viejos lo traen apagado). Google:
+    entradas `tarjeta_corte`/`tarjeta_pago` por cuenta en el set deseado del
+    reconciliador (actualiza por fingerprint, jamás duplica). Discord: avisos
+    a 7/3/1/0 días (`AVISOS_DIAS` en tarjetas.py) con dedup en sent_reminders
+    (clave con fecha).
+  - **Distribución de ingresos**: tablas nuevas `budget_buckets` (name, kind
+    max|min, percent, base real|esperado) y `budget_bucket_categories` con
+    UNIQUE(category_id) — una categoría vive en UN solo objetivo para no
+    contar un gasto dos veces. Cálculo 100% derivado en
+    `services/presupuesto_pct.py`: gasto = egresos MXN de sus categorías del
+    periodo; anual = ACUMULADO real del año (no promedio de meses); ingreso
+    esperado anual = mensual×12 (aproximación). Umbrales de máximos
+    centralizados en THRESHOLDS (75/90/100). Estados max:
+    ok|aviso|cerca|al_limite|excedido; min: debajo|cerca|cumplido (semántica
+    de progreso, nunca "ya usaste 90%").
+  - **Mensajes/alertas**: `services/mensajes_finanzas.py` — frases por reglas
+    deterministas, PULL (estado calculado, sin persistencia = sin spam ni
+    dedup manual). `GET /api/finance/alerts` alimenta la sección 💰 Finanzas
+    de la bandeja de Inicio; `GET /api/finance/upcoming` combina
+    corte/pago/suscripciones/deudas/programados para "Próximos movimientos".
+    Los push de Discord van aparte en el scheduler con sent_reminders.
 - **El dashboard agrega, nunca duplica (una entidad → muchas vistas).** La
   bandeja **Necesita tu atención** de Inicio y las **Actividades pendientes**
   de /negocios son vistas de registros que ya existían: tareas (`todos`, con
