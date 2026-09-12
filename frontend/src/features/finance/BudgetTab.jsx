@@ -50,8 +50,12 @@ function BarraBucket({ value, color }) {
   );
 }
 
-/** Alta/edición de un objetivo de distribución (bucket). */
-function BucketModal({ open, item, categories, onClose, onSaved }) {
+/** Alta/edición de un objetivo de distribución (bucket).
+ *
+ *  Un bucket puede medir egresos por categoría, transferencias hacia cuentas
+ *  destino (inversión/ahorro), o ambos. Los dos caminos son types distintos
+ *  de transacción, así que nada se cuenta dos veces. */
+function BucketModal({ open, item, categories, accounts = [], onClose, onSaved }) {
   const [form, setForm] = useState({});
   const [error, setError] = useState(null);
 
@@ -63,18 +67,21 @@ function BucketModal({ open, item, categories, onClose, onSaved }) {
         percent: item?.percent ?? "",
         base: item?.base || "real",
         category_ids: item?.category_ids || [],
+        account_ids: item?.account_ids || [],
       });
       setError(null);
     }
   }, [open, item]);
 
-  const toggleCat = (id) =>
+  const toggleEn = (campo) => (id) =>
     setForm((f) => ({
       ...f,
-      category_ids: f.category_ids.includes(id)
-        ? f.category_ids.filter((c) => c !== id)
-        : [...f.category_ids, id],
+      [campo]: f[campo].includes(id)
+        ? f[campo].filter((c) => c !== id)
+        : [...f[campo], id],
     }));
+  const toggleCat = toggleEn("category_ids");
+  const toggleAcc = toggleEn("account_ids");
 
   const save = async () => {
     if (!form.name.trim()) return setError("Ponle nombre al objetivo.");
@@ -86,6 +93,7 @@ function BucketModal({ open, item, categories, onClose, onSaved }) {
       percent: pct,
       base: form.base,
       category_ids: form.category_ids,
+      account_ids: form.account_ids,
     };
     try {
       if (item) await apiPut(`/api/finance/budget-buckets/${item.id}`, payload);
@@ -149,12 +157,12 @@ function BucketModal({ open, item, categories, onClose, onSaved }) {
         </div>
 
         <div className="flex flex-col gap-1.5 text-sm font-medium">
-          Categorías que cuentan aquí
+          Contar por categorías de gasto
           <span className="text-[11px] font-normal text-ink-soft">
-            Una categoría solo puede vivir en UN objetivo, para que ningún gasto
-            se cuente dos veces.
+            Egresos de estas categorías. Una categoría solo puede vivir en UN
+            objetivo, para que ningún gasto se cuente dos veces.
           </span>
-          <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto pt-1">
+          <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pt-1">
             {categories.map((c) => (
               <button key={c.id} onClick={() => toggleCat(c.id)}
                       className={`rounded-full px-3 py-1 text-xs font-medium transition ${
@@ -163,6 +171,27 @@ function BucketModal({ open, item, categories, onClose, onSaved }) {
                           : "bg-ink/5 text-ink-soft hover:bg-accent-soft"
                       }`}>
                 {c.icon} {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5 text-sm font-medium">
+          Contar transferencias hacia cuentas
+          <span className="text-[11px] font-normal text-ink-soft">
+            Para inversión/ahorro: lo que TRANSFIERES a estas cuentas cuenta como
+            destinado, sin volverse egreso ni tocar el flujo neto. Una cuenta
+            solo puede vivir en un objetivo.
+          </span>
+          <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pt-1">
+            {accounts.map((a) => (
+              <button key={a.id} onClick={() => toggleAcc(a.id)}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                        form.account_ids?.includes(a.id)
+                          ? "bg-accent text-white"
+                          : "bg-ink/5 text-ink-soft hover:bg-accent-soft"
+                      }`}>
+                🏦 {a.name}
               </button>
             ))}
           </div>
@@ -185,7 +214,7 @@ function BucketModal({ open, item, categories, onClose, onSaved }) {
   );
 }
 
-export default function BudgetTab({ version, categories = [] }) {
+export default function BudgetTab({ version, categories = [], accounts = [] }) {
   const { money, oculto } = usePrivacidad();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -399,6 +428,7 @@ export default function BudgetTab({ version, categories = [] }) {
         open={!!modal}
         item={modal?.item}
         categories={categories}
+        accounts={accounts}
         onClose={() => setModal(null)}
         onSaved={() => {
           setModal(null);

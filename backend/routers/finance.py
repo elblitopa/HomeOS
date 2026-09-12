@@ -11,6 +11,7 @@ from backend.models import (
     Account,
     BASE_CURRENCY,
     BudgetBucket,
+    BudgetBucketAccount,
     BudgetBucketCategory,
     Category,
     Consumable,
@@ -1590,7 +1591,10 @@ class BucketPayload(BaseModel):
     kind: str = "max"       # max = no pasarse | min = llegar al menos
     percent: float = Field(gt=0, le=100)
     base: str = "real"      # real = ingresos del periodo | esperado = presupuestado
+    # qué mide el bucket (puede ser ambos): egresos de estas categorías y/o
+    # transferencias HACIA estas cuentas (inversión, ahorro…)
     category_ids: list[int] = []
+    account_ids: list[int] = []
 
 
 def _validar_bucket(payload: BucketPayload, db: Session, bucket_id: int | None) -> None:
@@ -1617,6 +1621,25 @@ def _validar_bucket(payload: BucketPayload, db: Session, bucket_id: int | None) 
                 f"La categoría {cat.name if cat else enlace.category_id} ya pertenece "
                 f"al objetivo {dueno.name}. Quítala de ahí primero.",
             )
+    # mismo candado para cuentas destino: una cuenta en dos buckets contaría
+    # la misma transferencia dos veces
+    for aid in payload.account_ids:
+        if not db.get(Account, aid):
+            raise HTTPException(400, f"La cuenta {aid} no existe")
+    ocupadas_acc = (
+        db.query(BudgetBucketAccount, BudgetBucket)
+        .join(BudgetBucket, BudgetBucket.id == BudgetBucketAccount.bucket_id)
+        .filter(BudgetBucketAccount.account_id.in_(payload.account_ids or [-1]))
+        .all()
+    )
+    for enlace, dueno in ocupadas_acc:
+        if bucket_id is None or enlace.bucket_id != bucket_id:
+            acc = db.get(Account, enlace.account_id)
+            raise HTTPException(
+                409,
+                f"La cuenta {acc.name if acc else enlace.account_id} ya pertenece "
+                f"al objetivo {dueno.name}. Quítala de ahí primero.",
+            )
 
 
 @router.get("/budget-buckets")
@@ -1636,6 +1659,8 @@ def create_budget_bucket(payload: BucketPayload, db: Session = Depends(get_db)):
     db.flush()
     for cid in payload.category_ids:
         db.add(BudgetBucketCategory(bucket_id=bucket.id, category_id=cid))
+    for aid in payload.account_ids:
+        db.add(BudgetBucketAccount(bucket_id=bucket.id, account_id=aid))
     db.commit()
     return bucket.to_dict()
 
@@ -1650,12 +1675,17 @@ def update_budget_bucket(bucket_id: int, payload: BucketPayload, db: Session = D
     bucket.kind = payload.kind
     bucket.percent = payload.percent
     bucket.base = payload.base
-    # las categorías se reemplazan completas: el payload es la verdad
+    # categorías y cuentas se reemplazan completas: el payload es la verdad
     db.query(BudgetBucketCategory).filter(
         BudgetBucketCategory.bucket_id == bucket_id
     ).delete()
     for cid in payload.category_ids:
         db.add(BudgetBucketCategory(bucket_id=bucket_id, category_id=cid))
+    db.query(BudgetBucketAccount).filter(
+        BudgetBucketAccount.bucket_id == bucket_id
+    ).delete()
+    for aid in payload.account_ids:
+        db.add(BudgetBucketAccount(bucket_id=bucket_id, account_id=aid))
     db.commit()
     return bucket.to_dict()
 

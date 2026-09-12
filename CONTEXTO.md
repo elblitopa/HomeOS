@@ -152,9 +152,13 @@ Suscripciones, y Actividades agregadas en /negocios).
     a 7/3/1/0 días (`AVISOS_DIAS` en tarjetas.py) con dedup en sent_reminders
     (clave con fecha).
   - **Distribución de ingresos**: tablas nuevas `budget_buckets` (name, kind
-    max|min, percent, base real|esperado) y `budget_bucket_categories` con
-    UNIQUE(category_id) — una categoría vive en UN solo objetivo para no
-    contar un gasto dos veces. Cálculo 100% derivado en
+    max|min, percent, base real|esperado), `budget_bucket_categories` con
+    UNIQUE(category_id) y `budget_bucket_accounts` con UNIQUE(account_id) —
+    una categoría/cuenta vive en UN solo objetivo para no contar nada dos
+    veces. Un bucket mide egresos de sus categorías Y/O transferencias HACIA
+    sus cuentas destino (inversión/ahorro): la transferencia banco→GBM cuenta
+    como destinado SIN volverse egreso ni tocar ingresos/flujo neto de
+    ninguna vista (types disjuntos = imposible doble conteo). Cálculo 100% derivado en
     `services/presupuesto_pct.py`: gasto = egresos MXN de sus categorías del
     periodo; anual = ACUMULADO real del año (no promedio de meses); ingreso
     esperado anual = mensual×12 (aproximación). Umbrales de máximos
@@ -167,6 +171,12 @@ Suscripciones, y Actividades agregadas en /negocios).
     de la bandeja de Inicio; `GET /api/finance/upcoming` combina
     corte/pago/suscripciones/deudas/programados para "Próximos movimientos".
     Los push de Discord van aparte en el scheduler con sent_reminders.
+  - **Alcance V1 de notificaciones** (decisión explícita): presupuestos →
+    SOLO dentro de HomeOS (bandeja de Inicio + pestaña Presupuesto), sin push
+    externo. Tarjetas → calendario HomeOS + espejo Google (los eventos de
+    Google llevan recordatorio PROPIO: popup a las 9:00 AM del día anterior
+    vía AVISO_DIA_ANTERIOR, NO el default del calendario del usuario) +
+    Discord si el webhook algún día se configura. No hay sistema push nuevo.
 - **El dashboard agrega, nunca duplica (una entidad → muchas vistas).** La
   bandeja **Necesita tu atención** de Inicio y las **Actividades pendientes**
   de /negocios son vistas de registros que ya existían: tareas (`todos`, con

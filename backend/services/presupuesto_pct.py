@@ -24,6 +24,7 @@ from backend.models import (
     Account,
     BASE_CURRENCY,
     BudgetBucket,
+    BudgetBucketAccount,
     BudgetBucketCategory,
     ExchangeRate,
     PERIOD_MONTHS,
@@ -125,6 +126,10 @@ def resumen_buckets(db: Session, periodo: str = "mensual") -> dict:
     cats_de: dict[int, list[int]] = {}
     for e in enlaces:
         cats_de.setdefault(e.bucket_id, []).append(e.category_id)
+    # cuentas destino: las transferencias hacia ellas cuentan como destinado
+    cuentas_de: dict[int, list[int]] = {}
+    for e in db.query(BudgetBucketAccount).all():
+        cuentas_de.setdefault(e.bucket_id, []).append(e.account_id)
 
     # gasto por categoría del periodo, una sola consulta (solo egresos: las
     # transferencias no son gasto y los ingresos no restan)
@@ -140,11 +145,30 @@ def resumen_buckets(db: Session, periodo: str = "mensual") -> dict:
         .all()
     )
 
+    # transferencias entrantes por cuenta destino del periodo. Un egreso y una
+    # transferencia son types disjuntos y cada camino tiene su UNIQUE, así que
+    # una misma transacción no puede contarse dos veces en un bucket.
+    transfer_por_cuenta = dict(
+        db.query(Transaction.to_account_id, _mxn(Transaction))
+        .filter(
+            Transaction.type == "transferencia",
+            Transaction.to_account_id.isnot(None),
+            Transaction.occurred_at >= ini,
+            Transaction.occurred_at < fin,
+        )
+        .group_by(Transaction.to_account_id)
+        .all()
+    )
+
     out = []
     for b in buckets:
         base_monto = ingreso_real if b.base == "real" else ingreso_esperado
         objetivo = round(base_monto * b.percent / 100.0, 2)
-        gastado = round(sum(gasto_por_cat.get(c, 0.0) or 0.0 for c in cats_de.get(b.id, [])), 2)
+        por_categorias = sum(gasto_por_cat.get(c, 0.0) or 0.0 for c in cats_de.get(b.id, []))
+        por_transferencias = sum(
+            transfer_por_cuenta.get(a, 0.0) or 0.0 for a in cuentas_de.get(b.id, [])
+        )
+        gastado = round(por_categorias + por_transferencias, 2)
         frac_ingreso = (gastado / base_monto) if base_monto > 0 else None
         frac_objetivo = (gastado / objetivo) if objetivo > 0 else None
 
@@ -176,6 +200,9 @@ def resumen_buckets(db: Session, periodo: str = "mensual") -> dict:
         out.append({
             **b.to_dict(),
             "category_ids": cats_de.get(b.id, []),
+            "account_ids": cuentas_de.get(b.id, []),
+            "spent_categorias": round(por_categorias, 2),
+            "spent_transferencias": round(por_transferencias, 2),
             "base_amount": base_monto,
             "target_amount": objetivo,
             "spent_amount": gastado,

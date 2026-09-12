@@ -283,6 +283,28 @@ class BudgetBucketCategory(Base):
     )
 
 
+class BudgetBucketAccount(Base):
+    """Cuentas DESTINO cuyas transferencias entrantes cuentan para un bucket.
+
+    El caso: banco → cuenta de inversión/ahorro. Esa transferencia no es un
+    egreso (no toca Ingresos/Egresos/Flujo neto en ninguna vista), pero SÍ es
+    dinero destinado al objetivo "Inversión mínimo 20%". Mismo candado que
+    las categorías: UNIQUE(account_id) — una cuenta destino pertenece a UN
+    solo objetivo, para que una transferencia jamás se cuente dos veces.
+    """
+
+    __tablename__ = "budget_bucket_accounts"
+    __table_args__ = (UniqueConstraint("account_id", name="uq_bucket_cuenta"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bucket_id: Mapped[int] = mapped_column(
+        ForeignKey("budget_buckets.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
+    )
+
+
 class Goal(Base):
     """Meta de ahorro. Lo guardado se calcula con transferencias hacia la meta."""
 
