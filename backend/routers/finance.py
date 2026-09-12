@@ -190,8 +190,14 @@ def update_account(acc_id: int, payload: AccountPayload, db: Session = Depends(g
 
 
 class AdjustPayload(BaseModel):
-    # el saldo REAL que tiene la cuenta hoy (en su propia divisa)
-    real_balance: float
+    # el saldo REAL que tiene la cuenta hoy (en su propia divisa), en la
+    # convención del motor. Para cuentas normales es el camino de siempre.
+    real_balance: float | None = None
+    # SOLO tarjetas de crédito: cuánto SE DEBE hoy, como número POSITIVO
+    # (0 = liquidada). La API lo traduce a la convención interna (deuda =
+    # balance negativo) para que ningún cliente —web o el iOS del futuro—
+    # tenga que saber del signo. Exactamente uno de los dos campos.
+    current_debt: float | None = Field(default=None, ge=0)
 
 
 @router.post("/accounts/{acc_id}/adjust", status_code=201)
@@ -199,19 +205,30 @@ def adjust_account(acc_id: int, payload: AdjustPayload, db: Session = Depends(ge
     """Cuadra una cuenta con la realidad sin reescribir historia.
 
     Si unos días no se registraron movimientos, el usuario teclea el saldo
-    real y HomeOS crea UNA transacción de ajuste (ingreso o egreso) por la
-    diferencia. Así el saldo queda correcto y el historial cuenta la verdad:
-    "aquí hubo un ajuste", en vez de tocar initial_balance o inventar fechas.
+    real (o, en tarjetas, la DEUDA real en positivo) y HomeOS crea UNA
+    transacción de ajuste (ingreso o egreso) por la diferencia. Así el saldo
+    queda correcto y el historial cuenta la verdad: "aquí hubo un ajuste",
+    en vez de tocar initial_balance o inventar fechas.
     """
     acc = db.get(Account, acc_id)
     if not acc:
         raise HTTPException(404, "Cuenta no encontrada")
+    if (payload.real_balance is None) == (payload.current_debt is None):
+        raise HTTPException(400, "Manda real_balance o current_debt (exactamente uno).")
+    if payload.current_debt is not None and acc.kind != "credito":
+        raise HTTPException(400, "current_debt solo aplica a tarjetas de crédito.")
+    # deuda positiva del usuario -> balance negativo del motor
+    objetivo = (
+        payload.real_balance
+        if payload.real_balance is not None
+        else -payload.current_debt
+    )
     actual = _account_balances(db).get(acc_id, 0.0)
-    delta = round(payload.real_balance - actual, 2)
+    delta = round(objetivo - actual, 2)
     if abs(delta) < 0.005:
         raise HTTPException(400, "El saldo ya coincide: no hay nada que ajustar.")
     tx = Transaction(
-        description="Ajuste de saldo",
+        description="Ajuste de saldo" if payload.current_debt is None else "Ajuste de deuda",
         amount=abs(delta),
         type="ingreso" if delta > 0 else "egreso",
         account_id=acc_id,
@@ -223,7 +240,9 @@ def adjust_account(acc_id: int, payload: AdjustPayload, db: Session = Depends(ge
     return {
         "transaction": tx.to_dict(),
         "old_balance": actual,
-        "new_balance": payload.real_balance,
+        "new_balance": objetivo,
+        # lectura semántica para clientes de tarjetas (misma convención central)
+        "new_debt": round(max(0.0, -objetivo), 2) if acc.kind == "credito" else None,
         "delta": delta,
     }
 
