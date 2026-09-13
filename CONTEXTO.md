@@ -190,6 +190,27 @@ Suscripciones, y Actividades agregadas en /negocios).
     Google llevan recordatorio PROPIO: popup a las 9:00 AM del día anterior
     vía AVISO_DIA_ANTERIOR, NO el default del calendario del usuario) +
     Discord si el webhook algún día se configura. No hay sistema push nuevo.
+- **Personalización de páginas (estilo Notion: cover + menú ••• +
+  tipografía)**, rama `feature/page-personalization`. UNA arquitectura:
+  registro central `frontend/src/lib/pages.js` (page_keys estables:
+  home, finance, calendar, tasks, businesses, routines, notes, files, apps
+  — Ajustes fuera a propósito), espejado en `routers/page_prefs.py`.
+  `TopBar` recibe `pageKey` y pinta el cover (`PageBanner`) y el menú
+  (`PageMenu`) de `components/layout/PageHeader.jsx`; Inicio, que tiene su
+  saludo propio, usa las mismas dos piezas. Persistencia en backend (se
+  sincroniza entre dispositivos, a diferencia del ojo de privacidad): tabla
+  kv `settings`, JSON por `page_prefs:<key>` {font, banner_position} —
+  **sin migración**. El banner de Inicio sigue en su clave legacy
+  `home_banner_path` como fuente única (Ajustes → Portada la sigue
+  escribiendo). Banners = mismo `/api/uploads/banner` y miniatura WebP
+  **1280** (variante nueva de `THUMB_SIZES`, mismo cache privado; nunca el
+  original). Quitar banner solo suelta la asociación, el archivo se queda.
+  Tipografía: clases `.page-font-serif/.page-font-mono` (stacks del
+  sistema, sin fuentes descargadas) aplicadas por `PageFontScope` en
+  App.jsx SOLO al contenedor de rutas — el sidebar nunca cambia; las
+  páginas internas heredan la de su sección por prefijo de ruta.
+  `banner_position` ya se guarda (center|top|bottom) para el futuro
+  "Reposicionar" sin rehacer nada.
 - **El dashboard agrega, nunca duplica (una entidad → muchas vistas).** La
   bandeja **Necesita tu atención** de Inicio y las **Actividades pendientes**
   de /negocios son vistas de registros que ya existían: tareas (`todos`, con
@@ -278,6 +299,29 @@ Suscripciones, y Actividades agregadas en /negocios).
   en `requirements.txt`.
 
 ---
+
+## Fase futura: HomeOS AI Assistant (SOLO documentada, NO implementada)
+
+Un asistente que interprete lenguaje natural e imágenes y proponga acciones
+sobre los datos de HomeOS. Casos previstos:
+
+- **Foto de ticket** → extraer establecimiento, fecha, total, posible
+  categoría y cuenta si se deduce; mostrar PREVIEW ("Gasto $842.50 · HEB ·
+  Supermercado · 12 sep") y preguntar "¿Registrar?". Nunca guardar solo.
+- **Crear nota** desde ideas dictadas → preview → confirmar → nota.
+- **Rutinas**: "hoy ya hice gimnasio y lectura" → identifica rutinas
+  existentes → preview ✓ Gimnasio ✓ Lectura → confirmar → completar.
+- **Tareas**: "ya terminé pagar la luz" → busca el pendiente → preview
+  "Marcar como completada: Pagar luz" → confirmar.
+- **Finanzas**: "hoy gasté 350 pesos en gasolina con BBVA" → egreso, 350,
+  categoría Transporte, cuenta BBVA → preview → confirmar → registrar.
+
+**Arquitectura obligatoria**: el modelo JAMÁS toca SQLite ni ejecuta SQL o
+comandos. Flujo: usuario → intérprete de IA → acción ESTRUCTURADA (p. ej.
+`{action: "create_transaction", data: {amount, type, category, account_id}}`)
+→ preview → confirmación → **la API existente de HomeOS** valida y ejecuta →
+DB. Toda operación que modifique datos requiere confirmación en V1. Nada de
+esto existe todavía en el código.
 
 ## Pendientes y cosas sabidas
 
