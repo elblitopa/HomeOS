@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar.jsx";
+import { PagePrefsProvider, usePagePrefs } from "./hooks/usePagePrefs.jsx";
+import { fontClass, pageKeyForPath } from "./lib/pages.js";
 import InicioPage from "./features/inicio/InicioPage.jsx";
 import AppsPage from "./features/apps/AppsPage.jsx";
 import BusinessIndexPage from "./features/business/BusinessIndexPage.jsx";
@@ -15,6 +17,16 @@ import SettingsPage from "./features/settings/SettingsPage.jsx";
 import TodosPage from "./features/todos/TodosPage.jsx";
 
 const SIDEBAR_KEY = "homeos-sidebar";
+
+/** La tipografía elegida para la página actual (menú •••) se aplica SOLO
+ *  al contenedor de las rutas: el sidebar y la navegación quedan con la
+ *  fuente de siempre. La ruta se traduce a page_key con el registro central,
+ *  así que las páginas internas heredan la de su sección. */
+function PageFontScope({ children }) {
+  const { pathname } = useLocation();
+  const { prefs } = usePagePrefs(pageKeyForPath(pathname));
+  return <div className={fontClass(prefs.font)}>{children}</div>;
+}
 
 export default function App() {
   const [collapsed, setCollapsed] = useState(
@@ -34,6 +46,7 @@ export default function App() {
     // barra de estado. En las paginas sin suficiente contenido ese 100% manda
     // y toda la interfaz —la barra inferior incluida— queda unos 59 px arriba
     // del fondo real. dvh si mide la pantalla completa.
+    <PagePrefsProvider>
     <div className="homeos-bg flex min-h-dvh md:h-full">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <main
@@ -41,6 +54,7 @@ export default function App() {
           collapsed ? "md:pl-14" : ""
         }`}
       >
+        <PageFontScope>
         <Routes>
           <Route path="/" element={<InicioPage />} />
           <Route path="/apps" element={<AppsPage />} />
@@ -58,7 +72,9 @@ export default function App() {
               pintaría Inicio pero ningún enlace del menú quedaría activo */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </PageFontScope>
       </main>
     </div>
+    </PagePrefsProvider>
   );
 }
