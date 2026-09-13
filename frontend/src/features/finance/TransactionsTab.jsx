@@ -107,6 +107,14 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
     "rounded-xl border border-glass-border bg-surface/70 px-2.5 py-1.5 text-sm outline-none";
 
   const badge = (tx) => {
+    // conciliación: mueve el saldo pero no es dinero ganado ni gastado, así
+    // que va en neutro (el verde/rojo es de la actividad real)
+    if (tx.is_adjustment)
+      return (
+        <span className="font-semibold text-ink-soft">
+          {tx.type === "ingreso" ? "+" : "−"}{money(tx.amount)}
+        </span>
+      );
     if (tx.type === "ingreso") return <span className="font-semibold text-ok">+{money(tx.amount)}</span>;
     if (tx.type === "egreso") return <span className="font-semibold text-err">−{money(tx.amount)}</span>;
     return <span className="font-semibold text-accent">⇄ {money(tx.amount)}</span>;
@@ -212,7 +220,14 @@ export default function TransactionsTab({ accounts, categories, contexts, contex
                 <TipoBadge type={tx.type} />
                 {cat && <span className="text-lg">{cat.icon}</span>}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{tx.description}</p>
+                  <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                    <span className="truncate">{tx.description}</span>
+                    {tx.is_adjustment && (
+                      <span className="shrink-0 rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-medium text-ink-soft">
+                        Ajuste
+                      </span>
+                    )}
+                  </p>
                   <p className="truncate text-xs text-ink-soft">
                     {formatDateTime(tx.occurred_at)}
                     {acc ? ` · ${acc.name}` : ""}

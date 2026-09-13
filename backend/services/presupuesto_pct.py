@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from backend.models import (
     Account,
+    actividad_real,
     BASE_CURRENCY,
     BudgetBucket,
     BudgetBucketAccount,
@@ -58,6 +59,7 @@ def _ingreso_real(db: Session, ini: datetime, fin: datetime) -> float:
         db.query(_mxn(Transaction))
         .filter(
             Transaction.type == "ingreso",
+            actividad_real(),  # la base de los % jamás incluye conciliaciones
             Transaction.occurred_at >= ini,
             Transaction.occurred_at < fin,
         )
@@ -137,6 +139,8 @@ def resumen_buckets(db: Session, periodo: str = "mensual") -> dict:
         db.query(Transaction.category_id, _mxn(Transaction))
         .filter(
             Transaction.type == "egreso",
+            actividad_real(),  # defensivo: un ajuste no lleva categoría hoy,
+            # pero si algún día la llevara tampoco debe consumir presupuesto
             Transaction.occurred_at >= ini,
             Transaction.occurred_at < fin,
             Transaction.category_id.isnot(None),

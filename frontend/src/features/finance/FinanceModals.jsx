@@ -1627,7 +1627,11 @@ export function AplazarModal({ open, item, onClose, onSaved }) {
 
 /** Cuadrar una cuenta con la realidad: tecleas el saldo real y HomeOS crea
  *  UNA transacción de ajuste por la diferencia. El historial cuenta la
- *  verdad ("hubo un ajuste") en vez de reescribir movimientos viejos. */
+ *  verdad ("hubo un ajuste") en vez de reescribir movimientos viejos.
+ *
+ *  En tarjetas de crédito el usuario piensa en DEUDA, nunca en el balance
+ *  negativo del motor: el campo pide "cuánto debes hoy" en positivo y se
+ *  manda como current_debt — la traducción de signo vive en el backend. */
 export function AjusteModal({ open, accounts, onClose, onSaved }) {
   const { form, set, error, setError, saving, setSaving } = useForm(open, {
     account_id: accounts.find((a) => a.is_default)?.id || accounts[0]?.id || "",
@@ -1635,18 +1639,31 @@ export function AjusteModal({ open, accounts, onClose, onSaved }) {
   });
 
   const cuenta = accounts.find((a) => a.id === Number(form.account_id));
+  const esCredito = cuenta?.kind === "credito";
+  const deudaActual = esCredito ? Math.max(0, -(cuenta.balance ?? 0)) : null;
+  const favorActual = esCredito ? Math.max(0, cuenta.balance ?? 0) : null;
+
+  const capturado =
+    form.real_balance !== "" && !Number.isNaN(Number(form.real_balance))
+      ? Number(form.real_balance)
+      : null;
+  // en crédito lo capturado es deuda: el objetivo interno es su negativo
   const delta =
-    cuenta && form.real_balance !== "" && !Number.isNaN(Number(form.real_balance))
-      ? Number(form.real_balance) - (cuenta.balance ?? 0)
+    cuenta && capturado !== null
+      ? (esCredito ? -capturado : capturado) - (cuenta.balance ?? 0)
       : null;
 
   const save = async () => {
-    if (!cuenta || form.real_balance === "") return setError("Elige cuenta y saldo real.");
+    if (!cuenta || capturado === null)
+      return setError(esCredito ? "Elige cuenta y deuda actual." : "Elige cuenta y saldo real.");
+    if (esCredito && capturado < 0)
+      return setError("La deuda se escribe en positivo (0 si está liquidada).");
     setSaving(true);
     try {
-      await apiPost(`/api/finance/accounts/${cuenta.id}/adjust`, {
-        real_balance: Number(form.real_balance),
-      });
+      await apiPost(
+        `/api/finance/accounts/${cuenta.id}/adjust`,
+        esCredito ? { current_debt: capturado } : { real_balance: capturado }
+      );
       onSaved();
     } catch (e) {
       setError(e.message);
@@ -1656,11 +1673,12 @@ export function AjusteModal({ open, accounts, onClose, onSaved }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Actualizar saldo">
+    <Modal open={open} onClose={onClose} title={esCredito ? "Actualizar deuda" : "Actualizar saldo"}>
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">
-          Para cuando unos días no se registraron movimientos: teclea cuánto
-          hay HOY en la cuenta y se crea un ajuste por la diferencia.
+          {esCredito
+            ? "Teclea cuánto debes HOY en la tarjeta y se crea un ajuste por la diferencia."
+            : "Para cuando unos días no se registraron movimientos: teclea cuánto hay HOY en la cuenta y se crea un ajuste por la diferencia."}
         </p>
         <label className="flex flex-col gap-1 text-sm font-medium">
           Cuenta
@@ -1673,21 +1691,54 @@ export function AjusteModal({ open, accounts, onClose, onSaved }) {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm font-medium">
-          Saldo real actual {cuenta ? `(${cuenta.currency})` : ""}
+          {esCredito ? "Deuda actual" : "Saldo real actual"} {cuenta ? `(${cuenta.currency})` : ""}
           <input
             type="number" inputMode="decimal" step="0.01" className={inputCls}
+            min={esCredito ? "0" : undefined}
             value={form.real_balance} onChange={set("real_balance")} autoFocus
-            placeholder={cuenta ? String(cuenta.balance ?? 0) : ""}
+            placeholder={cuenta ? String(esCredito ? deudaActual : (cuenta.balance ?? 0)) : ""}
           />
+          {esCredito && (
+            <span className="text-[11px] font-normal text-ink-soft">
+              Ingresa cuánto debes actualmente en esta tarjeta. Escribe el monto
+              como número positivo.
+            </span>
+          )}
         </label>
-        {delta !== null && Math.abs(delta) >= 0.005 && (
-          <p className={`text-sm font-medium ${delta > 0 ? "text-ok" : "text-err"}`}>
-            Se registrará un {delta > 0 ? "ingreso" : "egreso"} de ajuste por{" "}
-            {fmtMoney(Math.abs(delta), cuenta.currency)}.
+        {/* una tarjeta con saldo a favor se reconoce en voz alta: capturar una
+            deuda aquí lo consumiría, y eso debe decirse antes de guardar */}
+        {esCredito && favorActual > 0 && (
+          <p className="text-sm font-medium text-ok">
+            Saldo a favor actual: {fmtMoney(favorActual, cuenta.currency)}.
+            {capturado !== null && Math.abs(delta) >= 0.005 && (
+              <span className="font-normal text-ink-soft">
+                {" "}Este ajuste lo reemplaza por una deuda de {fmtMoney(capturado, cuenta.currency)}.
+              </span>
+            )}
           </p>
         )}
+        {delta !== null && Math.abs(delta) >= 0.005 && (
+          esCredito ? (
+            <p className={`text-sm font-medium ${capturado <= deudaActual ? "text-ok" : "text-err"}`}>
+              Tu deuda quedará en {fmtMoney(capturado, cuenta.currency)}
+              {favorActual > 0
+                ? ""
+                : capturado < deudaActual
+                  ? ` (baja ${fmtMoney(deudaActual - capturado, cuenta.currency)})`
+                  : ` (sube ${fmtMoney(capturado - deudaActual, cuenta.currency)})`}
+              . Se registrará un ajuste por {fmtMoney(Math.abs(delta), cuenta.currency)}.
+            </p>
+          ) : (
+            <p className={`text-sm font-medium ${delta > 0 ? "text-ok" : "text-err"}`}>
+              Se registrará un {delta > 0 ? "ingreso" : "egreso"} de ajuste por{" "}
+              {fmtMoney(Math.abs(delta), cuenta.currency)}.
+            </p>
+          )
+        )}
         {delta !== null && Math.abs(delta) < 0.005 && (
-          <p className="text-sm text-ink-soft">El saldo ya coincide: nada que ajustar.</p>
+          <p className="text-sm text-ink-soft">
+            {esCredito ? "La deuda ya coincide: nada que ajustar." : "El saldo ya coincide: nada que ajustar."}
+          </p>
         )}
         {error && <p className="text-sm text-err">{error}</p>}
         <div className="flex justify-end gap-2">

@@ -204,6 +204,12 @@ class Transaction(Base):
     consumable_id: Mapped[int | None] = mapped_column(
         ForeignKey("consumables.id", ondelete="SET NULL"), nullable=True
     )
+    # CONCILIACION vs MOVIMIENTO REAL: un ajuste (Actualizar saldo/deuda)
+    # usa type ingreso/egreso solo para mover el balance, pero NO es
+    # actividad financiera: queda fuera de ingresos, egresos, flujo,
+    # presupuestos y alertas (criterio central: actividad_real()). El
+    # calculo de BALANCES jamas filtra por esto.
+    is_adjustment: Mapped[bool] = mapped_column(Boolean, default=False)
     attachment_path: Mapped[str | None] = mapped_column(String, nullable=True)
     attachment_name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -221,6 +227,7 @@ class Transaction(Base):
             "context_id": self.context_id,
             "provider_id": self.provider_id,
             "consumable_id": self.consumable_id,
+            "is_adjustment": bool(self.is_adjustment),
             "occurred_at": self.occurred_at.isoformat(),
             "fx_rate": self.fx_rate,
             "amount_mxn": round(self.amount * (self.fx_rate or 1.0), 2),
@@ -303,6 +310,22 @@ class BudgetBucketAccount(Base):
     account_id: Mapped[int] = mapped_column(
         ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
     )
+
+
+def actividad_real():
+    """Condición SQL para métricas de ACTIVIDAD financiera.
+
+    Regla del proyecto:
+    - BALANCE  = movimientos reales + conciliaciones (nunca usar este filtro:
+      los ajustes existen justo para llevar el saldo a la realidad).
+    - ACTIVIDAD (ingresos, egresos, flujo, resúmenes, presupuestos, alertas)
+      = SOLO movimientos reales -> agregar este filtro a la consulta.
+
+    Cualquier endpoint/metrica nueva que agregue montos por type ingreso o
+    egreso debe pasar por aquí; así un ajuste jamás vuelve a contar como
+    dinero ganado o gastado.
+    """
+    return Transaction.is_adjustment.is_(False)
 
 
 class Goal(Base):

@@ -15,6 +15,7 @@ from backend.models.event import Event
 from backend.models.file_entry import FileEntry, kind_for
 from backend.models.finance import (
     Account,
+    actividad_real,
     BASE_CURRENCY,
     BudgetBucket,
     BudgetBucketAccount,
@@ -40,6 +41,7 @@ from backend.models.todo import Todo, TodoEntry
 
 __all__ = [
     "Account",
+    "actividad_real",
     "Agent",
     "AgentCommand",
     "AppEntry",
