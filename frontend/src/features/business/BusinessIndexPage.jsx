@@ -48,7 +48,7 @@ export default function BusinessIndexPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <TopBar title="Negocios">
+      <TopBar title="Negocios" pageKey="businesses">
         <Button onClick={() => setModal({})}>＋ Negocio</Button>
       </TopBar>
 

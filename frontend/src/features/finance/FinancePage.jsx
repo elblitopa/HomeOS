@@ -53,7 +53,7 @@ export default function FinancePage() {
   return (
     <PrivacidadProvider>
     <div className="p-4 md:p-8">
-      <TopBar title="Finanzas">
+      <TopBar title="Finanzas" pageKey="finance">
         <BotonPrivacidad />
       </TopBar>
 

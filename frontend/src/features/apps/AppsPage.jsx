@@ -60,6 +60,7 @@ export default function AppsPage() {
     <div className="p-4 md:p-8">
       <TopBar
         title="Apps"
+        pageKey="apps"
         subtitle={
           apps.length
             ? `${runningCount} de ${apps.length} activas`

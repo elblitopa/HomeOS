@@ -390,6 +390,7 @@ export default function CalendarPage() {
     <div className="p-4 md:p-8">
       <TopBar
         title="Calendario"
+        pageKey="calendar"
         subtitle={enDia ? `${visibles.length} este día` : `${delMes} en ${MONTHS[month].toLowerCase()}`}
       >
         <Button onClick={() => openNew(enDia ? `${dayKey(day)}T09:00` : null)}>

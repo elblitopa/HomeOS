@@ -83,7 +83,7 @@ export default function FilesPage() {
         uploadFiles(e.dataTransfer.files);
       }}
     >
-      <TopBar title="Archivos" subtitle={`${files.length} archivos · ${fmtSize(totalSize)}`}>
+      <TopBar title="Archivos" pageKey="files" subtitle={`${files.length} archivos · ${fmtSize(totalSize)}`}>
         <Button onClick={() => inputRef.current?.click()} disabled={uploading > 0}>
           {uploading > 0 ? `Subiendo ${uploading}…` : "＋ Subir archivos"}
         </Button>

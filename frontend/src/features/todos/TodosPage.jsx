@@ -48,6 +48,7 @@ export default function TodosPage() {
     <div className="p-4 md:p-8">
       <TopBar
         title="Tareas"
+        pageKey="tasks"
         subtitle={`${todos.filter((t) => t.status === "pendiente").length} pendientes`}
       >
         <Button

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet } from "../../api/client.js";
+import { PageBanner, PageMenu } from "../../components/layout/PageHeader.jsx";
 import useContexts from "../../hooks/useContexts.js";
 import useDetalleItem from "../../hooks/useDetalleItem.js";
 import { COLORES_BASE } from "../../lib/calendarKinds.js";
@@ -23,8 +24,6 @@ export default function InicioPage() {
   // se aprovecha la misma respuesta de ajustes para los colores del detalle,
   // y así el hook no tiene que pedirlos por su cuenta
   const [colores, setColores] = useState(null);
-  // la portada tipo cover; sin banner configurado no se reserva espacio
-  const [banner, setBanner] = useState(null);
   // el panel puede quedarse abierto cruzando la medianoche: de este reloj
   // dependen tanto el saludo como la frase, para que las dos cambien juntas
   const [ahora, setAhora] = useState(() => new Date());
@@ -42,7 +41,6 @@ export default function InicioPage() {
         setPropias(s.quotes_custom || []);
         setFijadas(s.quotes_pinned || []);
         setColores({ ...COLORES_BASE, ...(s.calendar_colors || {}) });
-        setBanner(s.home_banner_path || null);
       })
       .catch(() => setColores(COLORES_BASE));
   }, []);
@@ -63,21 +61,17 @@ export default function InicioPage() {
   return (
     <div className="p-4 md:p-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
-        {/* portada opcional: el original de uploads (no la miniatura, que
-            tope a 640px y en pantalla completa se vería suave) */}
-        {banner && (
-          <img
-            src={banner}
-            alt=""
-            className="h-36 w-full rounded-2xl object-cover md:h-52"
-            onError={() => setBanner(null)}
-          />
-        )}
+        {/* la portada viene del sistema de personalización de páginas (mismo
+            home_banner_path de siempre, ahora como miniatura WebP 1280) */}
+        <PageBanner pageKey="home" />
 
         {/* el saludo es encabezado de TODA la página, fuera del grid: así la
             primera tarjeta del sidebar arranca a la altura de la frase del
-            día, no del saludo */}
-        <Saludo ahora={ahora} nombre={nombre} />
+            día, no del saludo. El ••• va a su derecha, como opción secundaria */}
+        <div className="flex items-start justify-between gap-3">
+          <Saludo ahora={ahora} nombre={nombre} />
+          <PageMenu pageKey="home" />
+        </div>
 
         {/* dos columnas en desktop: lo de siempre + la bandeja de atención.
             En móvil/iPad angosto se apilan en una sola columna */}
