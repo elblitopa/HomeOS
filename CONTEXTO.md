@@ -213,8 +213,10 @@ Suscripciones, y Actividades agregadas en /negocios).
   sincroniza entre dispositivos, a diferencia del ojo de privacidad): tabla
   kv `settings`, JSON por `page_prefs:<key>` {font, banner_position} —
   **sin migración**. El banner de Inicio sigue en su clave legacy
-  `home_banner_path` como fuente única (Ajustes → Portada la sigue
-  escribiendo). Banners = mismo `/api/uploads/banner` y miniatura WebP
+  `home_banner_path` como fuente única; la card "Portada de Inicio" de
+  Ajustes se ELIMINÓ (2026-09-13): el ÚNICO punto de entrada para banner y
+  tipografía de cualquier página, Inicio incluido, es ••• → Personalizar
+  página. Banners = mismo `/api/uploads/banner` y miniatura WebP
   **1280** (variante nueva de `THUMB_SIZES`, mismo cache privado; nunca el
   original). Quitar banner solo suelta la asociación, el archivo se queda.
   Tipografía: clases `.page-font-serif/.page-font-mono` (stacks del
@@ -251,9 +253,9 @@ Suscripciones, y Actividades agregadas en /negocios).
     `context_id`).
   - **Banner de Inicio**: clave `home_banner_path` en la tabla `settings`
     (kv, sin migración), imagen por `/api/uploads/banner` como los banners
-    de negocios; se gestiona en Ajustes → "Portada de Inicio". En Inicio se
-    pinta el ORIGINAL (no la miniatura, que topa en 640px); sin banner no se
-    reserva espacio. Los banners de negocio ya existían (modal de editar
+    de negocios; se gestiona SOLO desde ••• → Personalizar página (la card
+    de Ajustes ya no existe). En Inicio se pinta la miniatura WebP 1280 vía
+    `PageBanner`; sin banner no se reserva espacio. Los banners de negocio ya existían (modal de editar
     negocio + `contexts.banner_path`).
   - Los datos de Inicio viven en `useInbox` (un fetch por fuente, sin
     duplicar el de tareas); Inicio pasa los crudos a `AtencionSidebar`.
