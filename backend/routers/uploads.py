@@ -17,7 +17,9 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB para archivos de timeline
 
 # lo que Pillow sabe encoger; el resto se sirve tal cual
 THUMBABLE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff"}
-THUMB_SIZES = (96, 320, 640)
+# 1280: covers de pagina a ancho completo (640 se ve suave en un cover de
+# ~1100px); sigue siendo el mismo cache WebP privado de siempre
+THUMB_SIZES = (96, 320, 640, 1280)
 
 
 async def _save(file: UploadFile, target_dir: Path, kind: str) -> dict:

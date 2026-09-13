@@ -28,6 +28,7 @@ from backend.routers import (
     google,
     notes,
     routines,
+    page_prefs,
     settings,
     system,
     todos,
@@ -98,6 +99,7 @@ app.include_router(routines.router)
 app.include_router(notes.router)
 app.include_router(files.router)
 app.include_router(settings.router)
+app.include_router(page_prefs.router)
 app.include_router(uploads.router)
 app.include_router(system.router)
 
