@@ -7,8 +7,14 @@ registro de páginas personalizables se espeja con el del frontend
 rutas completas.
 
 El banner de Inicio ya existía como `home_banner_path`: esa clave sigue
-siendo su única fuente de verdad (Ajustes → Portada de Inicio la escribe),
-así que migrar aquí no cambia nada de lo que el usuario ya ve.
+siendo su única fuente de verdad (el menú ••• de Inicio la escribe), así que
+migrar aquí no cambia nada de lo que el usuario ya ve.
+
+Posición del banner (`banner_position`): un punto focal en porcentajes
+{x: 0..100, y: 0..100} que el frontend traduce a `object-position`, así la
+misma zona de la foto queda visible en móvil y desktop aunque el cover cambie
+de proporción. Los valores legacy center/top/bottom se traducen al leer, sin
+migración masiva.
 """
 
 import json
@@ -28,9 +34,10 @@ PAGE_KEYS = (
     "routines", "notes", "files", "apps",
 )
 FONTS = ("default", "serif", "mono")
-# posiciones del cover (object-position); V1 solo usa center, pero la API ya
-# acepta las demas para no rehacer nada cuando llegue "Reposicionar"
-POSITIONS = ("center", "top", "bottom")
+# punto focal por defecto (centro) y traduccion de los valores legacy que V1
+# guardaba como texto para object-position
+POSITION_DEFAULT = {"x": 50, "y": 50}
+LEGACY_POSITIONS = {"center": (50, 50), "top": (50, 0), "bottom": (50, 100)}
 
 LEGACY_HOME_BANNER = "home_banner_path"
 
@@ -40,7 +47,24 @@ def _clave(page_key: str) -> str:
 
 
 def _defaults() -> dict:
-    return {"banner_path": None, "font": "default", "banner_position": "center"}
+    return {"banner_path": None, "font": "default", "banner_position": dict(POSITION_DEFAULT)}
+
+
+def _posicion(valor) -> dict | None:
+    """Normaliza banner_position a {x, y} en 0..100 (enteros). None si no es
+    valido: quien lee cae al centro, quien escribe responde 400."""
+    if isinstance(valor, str):
+        legacy = LEGACY_POSITIONS.get(valor.strip().lower())
+        return {"x": legacy[0], "y": legacy[1]} if legacy else None
+    if not isinstance(valor, dict):
+        return None
+    try:
+        x, y = float(valor.get("x")), float(valor.get("y"))
+    except (TypeError, ValueError):
+        return None
+    if not (0 <= x <= 100 and 0 <= y <= 100):
+        return None
+    return {"x": round(x), "y": round(y)}
 
 
 def leer(db: Session, page_key: str) -> dict:
@@ -58,8 +82,7 @@ def leer(db: Session, page_key: str) -> dict:
         prefs["banner_path"] = get_setting(db, LEGACY_HOME_BANNER)
     if prefs["font"] not in FONTS:
         prefs["font"] = "default"
-    if prefs["banner_position"] not in POSITIONS:
-        prefs["banner_position"] = "center"
+    prefs["banner_position"] = _posicion(prefs["banner_position"]) or dict(POSITION_DEFAULT)
     return prefs
 
 
@@ -74,7 +97,8 @@ class PagePrefsPayload(BaseModel):
     # parcial: solo se tocan los campos que vengan (banner_path: null = quitar)
     banner_path: str | None = None
     font: str | None = None
-    banner_position: str | None = None
+    # {x, y} en porcentajes; se sigue aceptando el texto legacy center/top/bottom
+    banner_position: dict | str | None = None
 
 
 @router.get("")
@@ -94,14 +118,19 @@ def update_page_prefs(page_key: str, payload: PagePrefsPayload, db: Session = De
         if data["font"] not in FONTS:
             raise HTTPException(400, "Tipografía inválida: default, serif o mono")
         actual["font"] = data["font"]
-    if "banner_position" in data:
-        if data["banner_position"] not in POSITIONS:
-            raise HTTPException(400, "Posición inválida: center, top o bottom")
-        actual["banner_position"] = data["banner_position"]
     if "banner_path" in data:
         # quitar el banner solo suelta la asociacion: el archivo se queda en
         # uploads por si otra cosa (una cuenta, un negocio) lo usa
-        actual["banner_path"] = _validar_path(data["banner_path"])
+        nuevo = _validar_path(data["banner_path"])
+        if nuevo != actual["banner_path"]:
+            # una foto distinta (o ninguna) no hereda el encuadre de la anterior
+            actual["banner_position"] = dict(POSITION_DEFAULT)
+        actual["banner_path"] = nuevo
+    if "banner_position" in data:
+        posicion = _posicion(data["banner_position"])
+        if posicion is None:
+            raise HTTPException(400, "Posición inválida: {x, y} entre 0 y 100")
+        actual["banner_position"] = posicion
 
     if page_key == "home":
         set_setting(db, LEGACY_HOME_BANNER, actual["banner_path"])
