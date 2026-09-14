@@ -42,6 +42,7 @@ export function PageBanner({ pageKey }) {
   const [roto, setRoto] = useState(null);
   const [borrador, setBorrador] = useState(null); // {x, y} solo en modo edición
   const [guardando, setGuardando] = useState(false);
+  const [arrastrando, setArrastrando] = useState(false); // la barra se aparta mientras se arrastra
   const [error, setError] = useState(null);
   const imgRef = useRef(null);
   const arrastre = useRef(null); // {pointerId, x0, y0, pos0, sobra}
@@ -99,6 +100,7 @@ export function PageBanner({ pageKey }) {
       pos0: { ...posicion },
       sobra: sobrante(img),
     };
+    setArrastrando(true);
   };
 
   const alMover = (e) => {
@@ -124,6 +126,7 @@ export function PageBanner({ pageKey }) {
       // nada que soltar si no hubo captura
     }
     arrastre.current = null;
+    setArrastrando(false);
   };
 
   // alternativa accesible al drag: las flechas mueven el foco 2 puntos
@@ -162,7 +165,7 @@ export function PageBanner({ pageKey }) {
       decoding="async"
       draggable={false}
       className={`h-36 w-full rounded-2xl object-cover md:h-52 ${
-        editando ? "cursor-grab select-none active:cursor-grabbing" : "mb-5"
+        editando ? "cursor-grab select-none active:cursor-grabbing" : ""
       }`}
       // fuera de edición la posición guardada es la única fuente de verdad;
       // touch-action: none solo mientras se reposiciona, para que el dedo
@@ -180,16 +183,22 @@ export function PageBanner({ pageKey }) {
     />
   );
 
-  if (!editando) return img;
-
   const boton =
     "rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
+  // el contenedor existe siempre, para que la <img> no se desmonte (y se
+  // vuelva a decodificar) al entrar o salir del modo edición
   return (
     <div className="relative mb-5">
       {img}
       {/* barra flotante DENTRO del banner: no empuja el layout. Fondo glass
-          para que se lea igual sobre fotos claras y oscuras */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-end gap-2 p-3">
+          para que se lea igual sobre fotos claras y oscuras; mientras se
+          arrastra se desvanece para no tapar la esquina que se encuadra */}
+      {editando && (
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-end gap-2 p-3 transition-opacity ${
+          arrastrando ? "opacity-0" : "opacity-100"
+        }`}
+      >
         <span className="glass rounded-lg px-2.5 py-1 text-[11px] text-ink-soft" aria-live="polite">
           {error || "Arrastra la imagen para reposicionarla"}
         </span>
@@ -207,6 +216,7 @@ export function PageBanner({ pageKey }) {
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }
