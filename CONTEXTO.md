@@ -212,7 +212,12 @@ Suscripciones, y Actividades agregadas en /negocios).
   saludo propio, usa las mismas dos piezas. Persistencia en backend (se
   sincroniza entre dispositivos, a diferencia del ojo de privacidad): tabla
   kv `settings`, JSON por `page_prefs:<key>` {font, banner_position} —
-  **sin migración**. El banner de Inicio sigue en su clave legacy
+  **sin migración**. `banner_position` es un PUNTO FOCAL {x, y} en
+  porcentajes (50/50 = centro) que se pinta con `object-position: x% y%`
+  sobre `object-fit: cover`: la misma zona de la foto queda visible en
+  móvil y desktop aunque el cover cambie de proporción. Los valores legacy
+  center/top/bottom se traducen al leer (50/50, 50/0, 50/100), sin
+  migración masiva; el backend valida 0..100 y responde 400 si no. El banner de Inicio sigue en su clave legacy
   `home_banner_path` como fuente única; la card "Portada de Inicio" de
   Ajustes se ELIMINÓ (2026-09-13): el ÚNICO punto de entrada para banner y
   tipografía de cualquier página, Inicio incluido, es ••• → Personalizar
@@ -223,8 +228,22 @@ Suscripciones, y Actividades agregadas en /negocios).
   sistema, sin fuentes descargadas) aplicadas por `PageFontScope` en
   App.jsx SOLO al contenedor de rutas — el sidebar nunca cambia; las
   páginas internas heredan la de su sección por prefijo de ruta.
-  `banner_position` ya se guarda (center|top|bottom) para el futuro
-  "Reposicionar" sin rehacer nada.
+  **Reposicionar** (rama `feature/banner-reposition`, 2026-09-13): ••• →
+  Reposicionar pone al `PageBanner` en modo edición (la misma miniatura
+  1280, nunca el original): la foto se ARRASTRA con Pointer Events
+  (mouse/touch/stylus, `setPointerCapture`, `touch-action: none` SOLO
+  durante la edición para que el dedo mueva la foto y no la página). El
+  drag es real: se calcula cuánto sobra de imagen en cada eje con cover
+  (escala = max(cw/iw, ch/ih); sobrante = iw·escala − cw, ih·escala − ch) y
+  desplazar la foto d px equivale a mover el foco d/sobrante·100 puntos;
+  el eje sin sobrante no se mueve. Mientras se arrastra solo cambia un
+  borrador local (`borrador` en PageBanner; 0 requests); "Guardar posición"
+  hace UN PUT; Cancelar/Escape/navegar descartan el borrador sin PUT. El
+  menú ••• y el banner son hermanos, así que "estoy reposicionando"
+  viaja por el contexto de `usePagePrefs` (`reposicionando` = page_key).
+  Cambiar o quitar banner resetea la posición a 50/50 en el backend (una
+  foto nueva no hereda el encuadre). Flechas del teclado mueven el foco 2
+  puntos con el banner enfocado. Sin sliders ni editor de zoom en V1.
 - **El dashboard agrega, nunca duplica (una entidad → muchas vistas).** La
   bandeja **Necesita tu atención** de Inicio y las **Actividades pendientes**
   de /negocios son vistas de registros que ya existían: tareas (`todos`, con
