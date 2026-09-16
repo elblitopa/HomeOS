@@ -75,8 +75,10 @@ export function PageBanner({ pageKey }) {
   useEffect(() => {
     if (!editando) return;
     const tecla = (e) => e.key === "Escape" && cancelar();
-    document.addEventListener("keydown", tecla);
-    return () => document.removeEventListener("keydown", tecla);
+    // en fase de captura sobre window: se vio en producción que una extensión
+    // del navegador corta la propagación de Escape antes de llegar a document
+    window.addEventListener("keydown", tecla, true);
+    return () => window.removeEventListener("keydown", tecla, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editando, guardando]);
 
@@ -261,12 +263,14 @@ export function PageMenu({ pageKey }) {
       }
     };
     document.addEventListener("mousedown", fuera);
-    document.addEventListener("keydown", tecla);
+    // captura en window: mismo motivo que en PageBanner (extensiones que
+    // cortan la propagación de keydown antes de document)
+    window.addEventListener("keydown", tecla, true);
     // el foco entra al primer elemento del menú
     raiz.current?.querySelector('[role="menuitem"]')?.focus();
     return () => {
       document.removeEventListener("mousedown", fuera);
-      document.removeEventListener("keydown", tecla);
+      window.removeEventListener("keydown", tecla, true);
     };
   }, [abierto]);
 
